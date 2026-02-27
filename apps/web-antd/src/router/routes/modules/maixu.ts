@@ -26,6 +26,22 @@ const routes: RouteRecordRaw[] = [
           title: '麦序查询',
         },
       },
+      {
+        name: 'MaixuKeywordStat',
+        path: '/maixu/keyword-stat',
+        component: () => import('#/views/maixu/keyword-stat/index.vue'),
+        meta: {
+          title: '关键字统计',
+        },
+      },
+      {
+        name: 'MaixuTopCard',
+        path: '/maixu/top-card',
+        component: () => import('#/views/maixu/top-card/index.vue'),
+        meta: {
+          title: '置顶卡设置',
+        },
+      },
     ],
   },
 ];
