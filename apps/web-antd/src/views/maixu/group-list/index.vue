@@ -13,12 +13,19 @@ import {
   InputNumber,
   Menu,
   Modal,
+  Popconfirm,
   Space,
   Table,
   Tag,
   message,
 } from 'ant-design-vue';
 
+import {
+  deleteWxRoomMember,
+  queryWxRoomMembers,
+  saveWxRoomMember,
+  type WxRoomMember,
+} from '#/api/maixu/member';
 import {
   fetchMaixuRooms,
   type MaixuRoomItem,
@@ -42,6 +49,29 @@ const delaySaving = ref(false);
 const delayDays = ref(1);
 
 const selectedRoom = ref<MaixuRoomItem | null>(null);
+
+const memberModalOpen = ref(false);
+const memberLoading = ref(false);
+const memberKeyword = ref('');
+const memberRows = ref<WxRoomMember[]>([]);
+const memberTotal = ref(0);
+const memberPaginationCurrent = ref(1);
+const memberPaginationPageSize = ref(10);
+
+const memberFormModalOpen = ref(false);
+const memberFormSaving = ref(false);
+const editingMember = ref<WxRoomMember | null>(null);
+const memberForm = ref({
+  account: '',
+  city: '',
+  country: '',
+  display_name: '',
+  nickname: '',
+  province: '',
+  remark: '',
+  sex: 0,
+  wxid: '',
+});
 
 function parseDateString(value: string) {
   const timestamp = Date.parse(value.replace(' ', 'T'));
@@ -86,6 +116,10 @@ function upsertRoom(item: MaixuRoomItem) {
 
 function asRoom(record: Record<string, any>) {
   return record as MaixuRoomItem;
+}
+
+function asMember(record: Record<string, any>) {
+  return record as WxRoomMember;
 }
 
 function getRoomConfig(record: MaixuRoomItem) {
@@ -148,8 +182,19 @@ const columns: TableColumnsType<MaixuRoomItem> = [
     title: '操作',
     key: 'actions',
     fixed: 'right',
-    width: 140,
+    width: 160,
   },
+];
+
+const memberColumns: TableColumnsType<WxRoomMember> = [
+  { title: 'ID', dataIndex: 'id', key: 'id', width: 70 },
+  { title: '昵称', dataIndex: 'nickname', key: 'nickname', width: 130, ellipsis: true },
+  { title: '群昵称', dataIndex: 'display_name', key: 'display_name', width: 130, ellipsis: true },
+  { title: 'WXID', dataIndex: 'wxid', key: 'wxid', width: 220, ellipsis: true },
+  { title: '账号', dataIndex: 'account', key: 'account', width: 120, ellipsis: true },
+  { title: '备注', dataIndex: 'remark', key: 'remark', width: 140, ellipsis: true },
+  { title: '更新时间', dataIndex: 'update_time', key: 'update_time', width: 170 },
+  { title: '操作', key: 'actions', width: 120, fixed: 'right' },
 ];
 
 const filteredRooms = computed(() => {
@@ -173,6 +218,15 @@ const tablePagination = computed<TablePaginationConfig>(() => ({
   showSizeChanger: true,
   showTotal: (total) => `共 ${total} 条`,
   total: filteredRooms.value.length,
+}));
+
+const memberPagination = computed<TablePaginationConfig>(() => ({
+  current: memberPaginationCurrent.value,
+  pageSize: memberPaginationPageSize.value,
+  showQuickJumper: true,
+  showSizeChanger: true,
+  showTotal: (total) => `共 ${total} 条`,
+  total: memberTotal.value,
 }));
 
 const configValidationMessage = computed(() => {
@@ -314,6 +368,113 @@ async function setRoomRunning(record: MaixuRoomItem, running: boolean) {
   }
 }
 
+async function loadMembers(page = memberPaginationCurrent.value, pageSize = memberPaginationPageSize.value) {
+  if (!selectedRoom.value) {
+    return;
+  }
+
+  memberLoading.value = true;
+  try {
+    const result = await queryWxRoomMembers({
+      keyword: memberKeyword.value.trim(),
+      page,
+      pageSize,
+      roomWxid: selectedRoom.value.room_wxid,
+    });
+    memberRows.value = result.list;
+    memberTotal.value = result.total;
+    memberPaginationCurrent.value = result.page;
+    memberPaginationPageSize.value = result.pageSize;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '加载成员失败';
+    message.error(errorMessage);
+  } finally {
+    memberLoading.value = false;
+  }
+}
+
+function openMembersModal(record: MaixuRoomItem) {
+  selectedRoom.value = record;
+  memberKeyword.value = '';
+  memberPaginationCurrent.value = 1;
+  memberModalOpen.value = true;
+  loadMembers(1, memberPaginationPageSize.value);
+}
+
+function openMemberCreateModal() {
+  if (!selectedRoom.value) {
+    return;
+  }
+  editingMember.value = null;
+  memberForm.value = {
+    account: '',
+    city: '',
+    country: '',
+    display_name: '',
+    nickname: '',
+    province: '',
+    remark: '',
+    sex: 0,
+    wxid: '',
+  };
+  memberFormModalOpen.value = true;
+}
+
+function openMemberEditModal(record: WxRoomMember) {
+  editingMember.value = record;
+  memberForm.value = {
+    account: record.account || '',
+    city: record.city || '',
+    country: record.country || '',
+    display_name: record.display_name || '',
+    nickname: record.nickname || '',
+    province: record.province || '',
+    remark: record.remark || '',
+    sex: record.sex ?? 0,
+    wxid: record.wxid || '',
+  };
+  memberFormModalOpen.value = true;
+}
+
+async function saveMember() {
+  if (!selectedRoom.value) {
+    return;
+  }
+  if (!memberForm.value.wxid.trim()) {
+    message.warning('成员 WXID 不能为空');
+    return;
+  }
+
+  memberFormSaving.value = true;
+  try {
+    const result = await saveWxRoomMember({
+      ...memberForm.value,
+      id: editingMember.value?.id,
+      room_wxid: selectedRoom.value.room_wxid,
+      wxid: memberForm.value.wxid.trim(),
+    });
+    message.success(result.msg);
+    memberFormModalOpen.value = false;
+    await loadMembers(memberPaginationCurrent.value, memberPaginationPageSize.value);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '保存成员失败';
+    message.error(errorMessage);
+  } finally {
+    memberFormSaving.value = false;
+  }
+}
+
+async function removeMember(record: WxRoomMember) {
+  try {
+    const msg = await deleteWxRoomMember(record.id);
+    message.success(msg);
+    await loadMembers(memberPaginationCurrent.value, memberPaginationPageSize.value);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '删除成员失败';
+    message.error(errorMessage);
+  }
+}
+
 function handleAction(action: string, record: MaixuRoomItem) {
   if (action === 'config') {
     openConfigModal(record);
@@ -322,6 +483,11 @@ function handleAction(action: string, record: MaixuRoomItem) {
 
   if (action === 'delay') {
     openDelayModal(record);
+    return;
+  }
+
+  if (action === 'members') {
+    openMembersModal(record);
     return;
   }
 
@@ -338,6 +504,12 @@ function handleAction(action: string, record: MaixuRoomItem) {
 function handleTableChange(pagination: TablePaginationConfig) {
   paginationCurrent.value = pagination.current ?? 1;
   paginationPageSize.value = pagination.pageSize ?? 10;
+}
+
+function handleMemberTableChange(pagination: TablePaginationConfig) {
+  const nextPage = pagination.current ?? 1;
+  const nextSize = pagination.pageSize ?? 10;
+  loadMembers(nextPage, nextSize);
 }
 
 loadRooms();
@@ -385,6 +557,7 @@ loadRooms();
               <template #overlay>
                 <Menu @click="({ key }) => handleAction(String(key), asRoom(record))">
                   <Menu.Item key="config">配置</Menu.Item>
+                  <Menu.Item key="members">加载群成员</Menu.Item>
                   <Menu.Item key="delay">延长时间</Menu.Item>
                   <Menu.Item v-if="isRoomStarted(asRoom(record))" key="pause">暂停</Menu.Item>
                   <Menu.Item v-else key="resume">恢复</Menu.Item>
@@ -431,6 +604,66 @@ loadRooms();
           style="width: 100%"
         />
       </Space>
+    </Modal>
+
+    <Modal
+      v-model:open="memberModalOpen"
+      :footer="null"
+      :title="`群成员列表 - ${selectedRoom?.room_name || ''}`"
+      width="1150px"
+    >
+      <div class="mb-3 flex flex-wrap items-center gap-3">
+        <Input
+          v-model:value="memberKeyword"
+          allow-clear
+          placeholder="筛选: 昵称/WXID/账号/备注"
+          style="width: 260px"
+          @press-enter="() => loadMembers(1, memberPaginationPageSize)"
+        />
+        <Button type="primary" @click="loadMembers(1, memberPaginationPageSize)">查询</Button>
+        <Button @click="openMemberCreateModal">新增成员</Button>
+      </div>
+
+      <Table
+        :columns="memberColumns"
+        :data-source="memberRows"
+        :loading="memberLoading"
+        :pagination="memberPagination"
+        :scroll="{ x: 1200 }"
+        row-key="id"
+        @change="handleMemberTableChange"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'actions'">
+            <Space>
+              <Button size="small" type="link" @click="openMemberEditModal(asMember(record))">修改</Button>
+              <Popconfirm title="确认删除该成员吗？" @confirm="removeMember(asMember(record))">
+                <Button danger size="small" type="link">删除</Button>
+              </Popconfirm>
+            </Space>
+          </template>
+        </template>
+      </Table>
+    </Modal>
+
+    <Modal
+      v-model:open="memberFormModalOpen"
+      :confirm-loading="memberFormSaving"
+      :title="editingMember ? '修改成员' : '新增成员'"
+      width="700px"
+      @ok="saveMember"
+    >
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Input v-model:value="memberForm.wxid" placeholder="成员WXID*" />
+        <Input v-model:value="memberForm.account" placeholder="账号" />
+        <Input v-model:value="memberForm.nickname" placeholder="昵称" />
+        <Input v-model:value="memberForm.display_name" placeholder="群昵称" />
+        <Input v-model:value="memberForm.remark" placeholder="备注" />
+        <InputNumber v-model:value="memberForm.sex" :min="0" :max="2" style="width: 100%" placeholder="性别(0/1/2)" />
+        <Input v-model:value="memberForm.city" placeholder="城市" />
+        <Input v-model:value="memberForm.province" placeholder="省份" />
+        <Input v-model:value="memberForm.country" placeholder="国家" class="md:col-span-2" />
+      </div>
     </Modal>
   </Page>
 </template>

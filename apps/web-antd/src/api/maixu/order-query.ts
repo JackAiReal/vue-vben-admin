@@ -6,6 +6,7 @@ export interface RoomOrderRecord {
   type: string;
   date: string;
   update_time: string;
+  wx_names: string[];
   wxids: string[];
 }
 
@@ -100,6 +101,7 @@ function normalizeRecord(value: any): RoomOrderRecord {
     type: String(value?.type ?? ''),
     date: String(value?.date ?? ''),
     update_time: String(value?.update_time ?? ''),
+    wx_names: normalizeWxids(value?.wx_names),
     wxids: normalizeWxids(value?.wxids),
   };
 }

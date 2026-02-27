@@ -365,8 +365,15 @@ async function onDelete(record: RoomOrderRecord) {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'wxids'">
-            <div class="max-w-[260px] truncate">
-              {{ asRow(record).wxids.join(', ') }}
+            <div class="max-w-[300px] flex flex-wrap gap-1">
+              <Tag
+                v-for="(name, idx) in asRow(record).wx_names"
+                :key="`${asRow(record).id}-name-${idx}`"
+                color="cyan"
+              >
+                {{ name }}
+              </Tag>
+              <span v-if="asRow(record).wx_names.length === 0">-</span>
             </div>
           </template>
 
