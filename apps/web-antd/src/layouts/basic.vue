@@ -56,8 +56,8 @@ const notifications = ref<NotificationItem[]>([
     date: '1天前',
     isRead: false,
     message: '描述信息描述信息描述信息',
-    title: '跳转Workspace示例',
-    link: '/workspace',
+    title: '跳转概览示例',
+    link: '/analytics',
   },
   {
     id: 6,
