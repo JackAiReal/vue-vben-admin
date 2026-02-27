@@ -111,7 +111,7 @@ async function requestJson(path: string, init?: RequestInit) {
 }
 
 export async function queryTopCards(params: TopCardQueryParams) {
-  const result = await requestJson('/v1/top_list/query?admin=true', {
+  const result = await requestJson('/v1/room_top/query?admin=true', {
     body: JSON.stringify({
       end: params.end,
       keyword_fields: params.keywordFields ?? [],
@@ -136,8 +136,8 @@ export async function queryTopCards(params: TopCardQueryParams) {
 
 export async function saveTopCard(payload: TopCardSavePayload) {
   const path = payload.id
-    ? '/v1/top_list/update_by_id?admin=true'
-    : '/v1/top_list/create?admin=true';
+    ? '/v1/room_top/update_by_id?admin=true'
+    : '/v1/room_top/create?admin=true';
 
   const result = await requestJson(path, {
     body: JSON.stringify(payload),
@@ -151,7 +151,7 @@ export async function saveTopCard(payload: TopCardSavePayload) {
 }
 
 export async function deleteTopCardById(id: number) {
-  const result = await requestJson('/v1/top_list/delete_by_id?admin=true', {
+  const result = await requestJson('/v1/room_top/delete_by_id?admin=true', {
     body: JSON.stringify({ id }),
     method: 'POST',
   });
@@ -160,7 +160,7 @@ export async function deleteTopCardById(id: number) {
 }
 
 export async function exportTopCardsExcel(params: TopCardQueryParams) {
-  const response = await fetch(`${getApiBaseUrl()}/v1/top_list/export_excel?admin=true`, {
+  const response = await fetch(`${getApiBaseUrl()}/v1/room_top/export_excel?admin=true`, {
     body: JSON.stringify({
       end: params.end,
       keyword_fields: params.keywordFields ?? [],
