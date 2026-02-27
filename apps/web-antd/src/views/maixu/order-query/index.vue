@@ -60,6 +60,8 @@ const keywordFieldOptions = [
 
 const typeOptions = [
   { label: '全部', value: '' },
+  { label: '麦序统计', value: '麦序统计' },
+  { label: '打卡记录', value: '打卡记录' },
   { label: 'normal', value: 'normal' },
   { label: 'happy', value: 'happy' },
   { label: 'custom', value: 'custom' },
@@ -365,7 +367,10 @@ async function onDelete(record: RoomOrderRecord) {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'wxids'">
-            <div class="max-w-[300px] flex flex-wrap gap-1">
+            <div v-if="asRow(record).wxids_text" class="max-w-[320px] whitespace-pre-wrap text-xs leading-5">
+              {{ asRow(record).wxids_text }}
+            </div>
+            <div v-else class="max-w-[300px] flex flex-wrap gap-1">
               <Tag
                 v-for="(name, idx) in asRow(record).wx_names"
                 :key="`${asRow(record).id}-name-${idx}`"

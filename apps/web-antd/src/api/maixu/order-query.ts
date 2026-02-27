@@ -8,6 +8,7 @@ export interface RoomOrderRecord {
   update_time: string;
   wx_names: string[];
   wxids: string[];
+  wxids_text?: string;
 }
 
 export interface QueryRoomOrderParams {
@@ -92,7 +93,21 @@ function normalizeWxids(value: unknown) {
   return [];
 }
 
+function decodeEscapedText(text: string) {
+  if (!text) {
+    return '';
+  }
+  try {
+    return text.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r');
+  } catch {
+    return text;
+  }
+}
+
 function normalizeRecord(value: any): RoomOrderRecord {
+  const wxidsTextRaw =
+    typeof value?.wxids_text === 'string' ? value.wxids_text : undefined;
+
   return {
     id: Number(value?.id ?? 0),
     room_name: String(value?.room_name ?? ''),
@@ -103,6 +118,7 @@ function normalizeRecord(value: any): RoomOrderRecord {
     update_time: String(value?.update_time ?? ''),
     wx_names: normalizeWxids(value?.wx_names),
     wxids: normalizeWxids(value?.wxids),
+    wxids_text: wxidsTextRaw ? decodeEscapedText(wxidsTextRaw) : undefined,
   };
 }
 
