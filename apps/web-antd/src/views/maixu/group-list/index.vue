@@ -33,6 +33,7 @@ import {
   updateMaixuRoomConfig,
   updateMaixuRoomConfigItem,
 } from '#/api/maixu/room';
+import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const accessStore = useAccessStore();
 const userStore = useUserStore();
@@ -307,6 +308,7 @@ async function saveConfig() {
       update_time: updated.update_time || formatDateTime(new Date()),
     });
     configModalOpen.value = false;
+    await appendOperationLog('麦序群列表', '保存群配置', { room_wxid: selectedRoom.value.room_wxid, room_name: selectedRoom.value.room_name });
     message.success('配置已保存');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '保存配置失败';
@@ -360,6 +362,7 @@ async function extendRoomExpireTime() {
       update_time: updated.update_time || formatDateTime(new Date()),
     });
     delayModalOpen.value = false;
+    await appendOperationLog('麦序群列表', '延长群配置时间', { room_wxid: room.room_wxid, days: delayDays.value });
     message.success(`已延长 ${delayDays.value} 天`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '延长时间失败';
@@ -389,6 +392,7 @@ async function setRoomRunning(record: MaixuRoomItem, running: boolean) {
       update_time: updated.update_time || formatDateTime(new Date()),
     });
 
+    await appendOperationLog('麦序群列表', running ? '恢复群聊' : '暂停群聊', { room_wxid: record.room_wxid, room_name: record.room_name });
     message.success(running ? '群聊已恢复' : '群聊已暂停');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '操作失败';
@@ -497,6 +501,7 @@ async function saveMember() {
       room_wxid: selectedRoom.value.room_wxid,
       wxid: memberForm.value.wxid.trim(),
     });
+    await appendOperationLog('麦序群列表/成员管理', editingMember.value ? '修改成员' : '新增成员', { room_wxid: selectedRoom.value.room_wxid, wxid: memberForm.value.wxid, nickname: memberForm.value.nickname });
     message.success(result.msg);
     memberFormModalOpen.value = false;
     await loadMembers(memberPaginationCurrent.value, memberPaginationPageSize.value);
@@ -515,6 +520,7 @@ async function removeMember(record: WxRoomMember) {
   }
   try {
     const msg = await deleteWxRoomMember(record.id);
+    await appendOperationLog('麦序群列表/成员管理', '删除成员', { id: record.id, wxid: record.wxid, room_wxid: record.room_wxid });
     message.success(msg);
     await loadMembers(memberPaginationCurrent.value, memberPaginationPageSize.value);
   } catch (error) {

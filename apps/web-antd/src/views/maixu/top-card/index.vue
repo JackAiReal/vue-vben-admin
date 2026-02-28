@@ -30,6 +30,7 @@ import {
   type TopCardQueryParams,
   type TopCardRecord,
 } from '#/api/maixu/top-card';
+import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const { RangePicker } = DatePicker;
 
@@ -265,6 +266,7 @@ async function submitForm() {
       top_type: formState.top_type.trim(),
       update_time: formState.update_time || undefined,
     });
+    await appendOperationLog('置顶卡设置', editingRecord.value ? '修改置顶卡' : '新增置顶卡', { room_wxid: formState.room_wxid, top_type: formState.top_type, give_wxid: formState.give_wxid, remind_num: formState.remind_num });
     message.success(result.msg);
     formModalOpen.value = false;
     await loadData(1, paginationPageSize.value);
@@ -282,6 +284,7 @@ async function onDelete(row: TopCardRecord) {
   }
   try {
     const msg = await deleteTopCardById(row.id);
+    await appendOperationLog('置顶卡设置', '删除置顶卡', { id: row.id, room_wxid: row.room_wxid, top_type: row.top_type });
     message.success(msg);
     await loadData(paginationCurrent.value, paginationPageSize.value);
   } catch (error) {

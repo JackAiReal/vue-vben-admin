@@ -42,15 +42,6 @@ const routes: RouteRecordRaw[] = [
           title: '置顶卡设置',
         },
       },
-      {
-        name: 'MaixuRbac',
-        path: '/maixu/rbac',
-        component: () => import('#/views/maixu/rbac/index.vue'),
-        meta: {
-          authority: ['super'],
-          title: '权限分组管理',
-        },
-      },
     ],
   },
 ];

@@ -31,6 +31,7 @@ import {
   type KeywordStatQueryParams,
   type KeywordStatRecord,
 } from '#/api/maixu/keyword-stat';
+import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const { RangePicker } = DatePicker;
 
@@ -261,6 +262,7 @@ async function submitForm() {
       tag_type: formState.tag_type.trim(),
       update_time: formState.update_time || undefined,
     });
+    await appendOperationLog('关键字统计', editingRecord.value ? '修改关键字统计' : '新增关键字统计', { tag_room: formState.tag_room, tag_type: formState.tag_type, tag_one: formState.tag_one, tag_num: formState.tag_num });
     message.success(result.msg);
     formModalOpen.value = false;
     await loadData(1, paginationPageSize.value);
@@ -278,6 +280,7 @@ async function onDelete(row: KeywordStatRecord) {
   }
   try {
     const msg = await deleteKeywordStatById(row.id);
+    await appendOperationLog('关键字统计', '删除关键字统计', { id: row.id, tag_room: row.tag_room, tag_type: row.tag_type });
     message.success(msg);
     await loadData(paginationCurrent.value, paginationPageSize.value);
   } catch (error) {

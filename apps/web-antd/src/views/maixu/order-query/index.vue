@@ -31,6 +31,7 @@ import {
   updateRoomOrderById,
   upsertRoomOrder,
 } from '#/api/maixu/order-query';
+import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const { RangePicker } = DatePicker;
 
@@ -292,6 +293,7 @@ async function submitForm() {
         update_time: formState.update_time || undefined,
         wxids,
       });
+      await appendOperationLog('麦序查询', '修改麦序记录', { room_wxid: formState.room_wxid, date: formState.date, type: formState.type, time_hour: formState.time_hour });
       message.success(result.msg);
     } else {
       const result = await upsertRoomOrder({
@@ -303,6 +305,7 @@ async function submitForm() {
         update_time: formState.update_time || undefined,
         wxids,
       });
+      await appendOperationLog('麦序查询', '新增麦序记录', { room_wxid: formState.room_wxid, date: formState.date, type: formState.type, time_hour: formState.time_hour });
       message.success(result.msg);
     }
 
@@ -323,6 +326,7 @@ async function onDelete(record: RoomOrderRecord) {
   }
   try {
     const msg = await deleteRoomOrderById(record.id);
+    await appendOperationLog('麦序查询', '删除麦序记录', { id: record.id, room_wxid: record.room_wxid, date: record.date });
     message.success(msg);
     await loadData(paginationCurrent.value, paginationPageSize.value);
   } catch (error) {

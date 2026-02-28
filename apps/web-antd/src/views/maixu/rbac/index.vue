@@ -32,6 +32,7 @@ import {
   type PermissionGroup,
   type RbacUser,
 } from '#/api/maixu/rbac';
+import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const userStore = useUserStore();
 const isSuper = computed(() => (userStore.userInfo?.roles || []).includes('super'));
@@ -162,6 +163,7 @@ async function submitGroup() {
       permissions: groupForm.permissions,
     });
     groupModalOpen.value = false;
+    await appendOperationLog('系统配置/权限分组管理', editingGroup.value ? '修改权限组' : '新增权限组', { name: groupForm.name, permissions: groupForm.permissions });
     message.success('分组保存成功');
     await loadData();
   } catch (error) {
@@ -174,6 +176,7 @@ async function submitGroup() {
 async function removeGroup(record: PermissionGroup) {
   try {
     await deletePermissionGroup(record.id);
+    await appendOperationLog('系统配置/权限分组管理', '删除权限组', { id: record.id, name: record.name });
     message.success('分组删除成功');
     await loadData();
   } catch (error) {
@@ -229,6 +232,7 @@ async function submitUser() {
       username: userForm.username.trim(),
     });
     userModalOpen.value = false;
+    await appendOperationLog('系统配置/权限分组管理', editingUser.value ? '修改账号' : '新增账号', { username: userForm.username, role: userForm.role, groupId: userForm.groupId });
     message.success('用户保存成功');
     await loadData();
   } catch (error) {
@@ -241,6 +245,7 @@ async function submitUser() {
 async function removeUser(record: RbacUser) {
   try {
     await deleteRbacUser(record.id);
+    await appendOperationLog('系统配置/权限分组管理', '删除账号', { id: record.id, username: record.username });
     message.success('用户删除成功');
     await loadData();
   } catch (error) {
