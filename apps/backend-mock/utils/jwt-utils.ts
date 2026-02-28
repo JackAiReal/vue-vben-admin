@@ -10,6 +10,7 @@ const ACCESS_TOKEN_SECRET = 'access_token_secret';
 const REFRESH_TOKEN_SECRET = 'refresh_token_secret';
 
 interface JwtUserInfo {
+  email?: string;
   enabled: boolean;
   groupId: number;
   homePath?: string;

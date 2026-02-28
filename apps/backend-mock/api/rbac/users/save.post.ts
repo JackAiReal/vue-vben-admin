@@ -1,8 +1,12 @@
 import { eventHandler, readBody } from 'h3';
-
 import { verifyAccessToken } from '~/utils/jwt-utils';
 import { saveUser } from '~/utils/rbac-store';
-import { forbiddenResponse, unAuthorizedResponse, useResponseError, useResponseSuccess } from '~/utils/response';
+import {
+  forbiddenResponse,
+  unAuthorizedResponse,
+  useResponseError,
+  useResponseSuccess,
+} from '~/utils/response';
 
 export default eventHandler(async (event) => {
   const user = verifyAccessToken(event);
@@ -15,9 +19,16 @@ export default eventHandler(async (event) => {
 
   try {
     const body = await readBody(event);
-    const data = saveUser(body || {});
+    const role = String(body?.role || body?.roles?.[0] || 'user');
+    const payload = {
+      ...body,
+      roles: [role],
+    };
+    const data = saveUser(payload || {});
     return useResponseSuccess(data);
   } catch (error) {
-    return useResponseError(error instanceof Error ? error.message : '保存失败');
+    return useResponseError(
+      error instanceof Error ? error.message : '保存失败',
+    );
   }
 });

@@ -324,6 +324,9 @@ catalogs:
     nitropack:
       specifier: ^2.13.1
       version: 2.13.1
+    nodemailer:
+      specifier: ^7.0.10
+      version: 7.0.13
     nprogress:
       specifier: ^0.2.0
       version: 0.2.0
@@ -644,6 +647,9 @@ importers:
       nitropack:
         specifier: 'catalog:'
         version: 2.13.1
+      nodemailer:
+        specifier: 'catalog:'
+        version: 7.0.13
     devDependencies:
       '@types/jsonwebtoken':
         specifier: 'catalog:'
@@ -8517,6 +8523,10 @@ packages:
 
   node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
+
+  nodemailer@7.0.13:
+    resolution: {integrity: sha512-PNDFSJdP+KFgdsG3ZzMXCgquO7I6McjY2vlqILjtJd0hy8wEvtugS9xKRF2NWlPNGxvLCXlTNIae4serI7dinw==}
+    engines: {node: '>=6.0.0'}
 
   nopt@7.2.1:
     resolution: {integrity: sha512-taM24ViiimT/XntxbPyJQzCG+p4EKOpgD3mxFwW38mGjVUrfERQOeY4EDHjdnptttfHuHQXFx+lTP08Q+mLa/w==}
@@ -18514,6 +18524,8 @@ snapshots:
   node-mock-http@1.0.4: {}
 
   node-releases@2.0.27: {}
+
+  nodemailer@7.0.13: {}
 
   nopt@7.2.1:
     dependencies:

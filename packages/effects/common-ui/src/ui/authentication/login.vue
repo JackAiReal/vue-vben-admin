@@ -110,6 +110,8 @@ defineExpose({
 
     <Form />
 
+    <slot name="before-submit"></slot>
+
     <div
       v-if="showRememberMe || showForgetPassword"
       class="mb-6 flex justify-between"
@@ -132,6 +134,7 @@ defineExpose({
         {{ $t('authentication.forgetPassword') }}
       </span>
     </div>
+
     <VbenButton
       :class="{
         'cursor-wait': loading,

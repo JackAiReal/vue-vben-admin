@@ -12,16 +12,21 @@ import {
 } from '~/utils/response';
 
 export default defineEventHandler(async (event) => {
-  const { password, username } = await readBody(event);
-  if (!password || !username) {
+  const { account, humanVerified, password, username } = await readBody(event);
+  const loginAccount = String(account || username || '').trim();
+  if (!password || !loginAccount) {
     setResponseStatus(event, 400);
     return useResponseError(
       'BadRequestException',
-      'Username and password are required',
+      'Account and password are required',
     );
   }
 
-  const findUser = findAuthUser(username, password);
+  if (humanVerified !== true) {
+    return useResponseError('请先完成人机校验');
+  }
+
+  const findUser = findAuthUser(loginAccount, password);
 
   if (!findUser) {
     clearRefreshTokenCookie(event);

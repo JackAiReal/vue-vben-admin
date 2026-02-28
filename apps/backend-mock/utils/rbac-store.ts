@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,7 @@ export interface RbacGroup {
 }
 
 export interface RbacUser {
+  email?: string;
   enabled: boolean;
   groupId: number;
   homePath?: string;
@@ -26,6 +28,19 @@ export interface RbacUser {
   realName: string;
   roles: string[];
   username: string;
+}
+
+export interface NotificationSettings {
+  bodyTemplate: string;
+  configured: boolean;
+  fromEmail: string;
+  fromName: string;
+  smtpHost: string;
+  smtpPassword: string;
+  smtpPort: number;
+  smtpUsername: string;
+  subjectTemplate: string;
+  useSSL: boolean;
 }
 
 export interface OperationLogItem {
@@ -52,6 +67,10 @@ const RBAC_PERMISSIONS: RbacPermission[] = [
   { category: '置顶卡设置', code: 'MX_TOP_EDIT', label: '编辑置顶卡设置' },
   { category: '系统配置', code: 'MX_RBAC_VIEW', label: '查看权限分组管理' },
   { category: '系统配置', code: 'MX_RBAC_EDIT', label: '编辑权限分组管理' },
+  { category: '系统配置', code: 'MX_USER_VIEW', label: '查看用户管理' },
+  { category: '系统配置', code: 'MX_USER_EDIT', label: '编辑用户管理' },
+  { category: '系统配置', code: 'MX_NOTIFY_VIEW', label: '查看通知设置' },
+  { category: '系统配置', code: 'MX_NOTIFY_EDIT', label: '编辑通知设置' },
   { category: '系统配置', code: 'MX_OPLOG_VIEW', label: '查看操作日志' },
   { category: '系统配置', code: 'MX_OPLOG_EDIT', label: '编辑操作日志' },
 ];
@@ -63,6 +82,7 @@ const VIEW_ONLY_CODES = [
   'MX_ORDER_VIEW',
   'MX_KEYWORD_VIEW',
   'MX_TOP_VIEW',
+  'MX_NOTIFY_VIEW',
   'MX_OPLOG_VIEW',
 ];
 
@@ -73,9 +93,20 @@ const EDITOR_CODES = [
   'MX_ORDER_EDIT',
   'MX_KEYWORD_EDIT',
   'MX_TOP_EDIT',
+  'MX_NOTIFY_EDIT',
 ];
 
 const ALL_CODES = RBAC_PERMISSIONS.map((item) => item.code);
+
+const DEFAULT_NOTIFY_SUBJECT = '【{{app_name}}】邮箱验证码';
+const DEFAULT_NOTIFY_BODY = [
+  '你好，',
+  '',
+  '你正在注册 {{app_name}} 账号，本次验证码为：{{code}}',
+  '验证码 {{minutes}} 分钟内有效，请勿泄露给他人。',
+  '',
+  '如果不是你本人操作，请忽略此邮件。',
+].join('\n');
 
 const DB_FILE = fileURLToPath(new URL('../.data/rbac.sqlite', import.meta.url));
 if (!existsSync(dirname(DB_FILE))) {
@@ -98,6 +129,7 @@ CREATE TABLE IF NOT EXISTS rbac_groups (
 CREATE TABLE IF NOT EXISTS rbac_users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL DEFAULT '',
   password TEXT NOT NULL,
   real_name TEXT NOT NULL,
   role TEXT NOT NULL,
@@ -118,7 +150,46 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   detail_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS notification_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  smtp_host TEXT NOT NULL DEFAULT '',
+  smtp_port INTEGER NOT NULL DEFAULT 465,
+  smtp_username TEXT NOT NULL DEFAULT '',
+  smtp_password TEXT NOT NULL DEFAULT '',
+  use_ssl INTEGER NOT NULL DEFAULT 1,
+  from_email TEXT NOT NULL DEFAULT '',
+  from_name TEXT NOT NULL DEFAULT '',
+  subject_template TEXT NOT NULL DEFAULT '',
+  body_template TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scene TEXT NOT NULL,
+  email TEXT NOT NULL,
+  code TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
 `);
+
+function ensureColumn(tableName: string, columnName: string, ddl: string) {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const exists = rows.some((row: any) => String(row.name) === columnName);
+  if (!exists) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${ddl}`);
+  }
+}
+
+ensureColumn('rbac_users', 'email', "email TEXT NOT NULL DEFAULT ''");
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_rbac_users_email ON rbac_users(email)');
+db.exec(
+  'CREATE INDEX IF NOT EXISTS idx_email_codes_scene_email ON email_verification_codes(scene, email)',
+);
 
 function nowText() {
   const date = new Date();
@@ -131,13 +202,13 @@ function toSafePermissions(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
   }
-  return Array.from(
-    new Set(
+  return [
+    ...new Set(
       value
         .map((item) => String(item || '').trim())
         .filter((item) => item && valid.has(item)),
     ),
-  );
+  ];
 }
 
 function parsePermissions(value: string) {
@@ -146,6 +217,36 @@ function parsePermissions(value: string) {
   } catch {
     return [];
   }
+}
+
+function normalizeEmail(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase();
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(value);
+}
+
+function isValidUsername(value: string) {
+  return /^[\w\-.]{4,32}$/.test(value);
+}
+
+function formatDateByMinutes(minutes: number) {
+  const date = new Date(Date.now() + Math.max(1, minutes) * 60 * 1000);
+  const pad = (value: number) => `${value}`.padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function fillTemplate(
+  template: string,
+  variables: Record<string, number | string>,
+) {
+  return template.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => {
+    const value = variables[key];
+    return value === undefined || value === null ? '' : String(value);
+  });
 }
 
 function seedDefaults() {
@@ -194,26 +295,76 @@ function seedDefaults() {
     const viewGroupId = Number(getGroupId.get('查看权限组')?.id || 2);
 
     const insertUser = db.prepare(
-      'INSERT INTO rbac_users (username, password, real_name, role, group_id, enabled, home_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO rbac_users (username, email, password, real_name, role, group_id, enabled, home_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     const now = nowText();
-    insertUser.run('vben', '123456', 'Vben', 'super', superGroupId, 1, '/analytics', now, now);
-    insertUser.run('admin', '123456', 'Admin', 'admin', viewGroupId, 1, '/analytics', now, now);
-    insertUser.run('jack', '123456', 'Jack', 'user', viewGroupId, 1, '/analytics', now, now);
+    insertUser.run(
+      'vben',
+      'vben@example.com',
+      '123456',
+      'Vben',
+      'super',
+      superGroupId,
+      1,
+      '/analytics',
+      now,
+      now,
+    );
+    insertUser.run(
+      'admin',
+      'admin@example.com',
+      '123456',
+      'Admin',
+      'admin',
+      viewGroupId,
+      1,
+      '/analytics',
+      now,
+      now,
+    );
+    insertUser.run(
+      'jack',
+      'jack@example.com',
+      '123456',
+      'Jack',
+      'user',
+      viewGroupId,
+      1,
+      '/analytics',
+      now,
+      now,
+    );
+  }
+
+  const settingsCount = Number(
+    db.prepare('SELECT COUNT(1) as count FROM notification_settings').get()
+      ?.count || 0,
+  );
+  if (settingsCount === 0) {
+    db.prepare(
+      `INSERT INTO notification_settings
+       (id, smtp_host, smtp_port, smtp_username, smtp_password, use_ssl, from_email, from_name, subject_template, body_template, updated_at)
+       VALUES (1, '', 465, '', '', 1, '', '', ?, ?, ?)`,
+    ).run(DEFAULT_NOTIFY_SUBJECT, DEFAULT_NOTIFY_BODY, nowText());
   }
 }
 
 seedDefaults();
 
+db.exec(
+  "UPDATE rbac_users SET email = username || '@example.com' WHERE email = ''",
+);
+
 function toSafeUser(row: any) {
   return {
+    email: normalizeEmail(row.email),
     enabled: Number(row.enabled) === 1,
     groupId: Number(row.group_id),
-    homePath: String(row.home_path || ""),
+    homePath: String(row.home_path || ''),
     id: Number(row.id),
-    realName: String(row.real_name || ""),
+    realName: String(row.real_name || ''),
     roles: [String(row.role)],
-    username: String(row.username || ""),
+    username: String(row.username || ''),
   };
 }
 
@@ -223,7 +374,9 @@ export function getPermissionDefinitions() {
 
 export function listGroups(): RbacGroup[] {
   const rows = db
-    .prepare('SELECT id, name, description, permissions, readonly FROM rbac_groups ORDER BY id ASC')
+    .prepare(
+      'SELECT id, name, description, permissions, readonly FROM rbac_groups ORDER BY id ASC',
+    )
     .all();
 
   return rows.map((row: any) => ({
@@ -245,17 +398,28 @@ export function saveGroup(payload: Partial<RbacGroup>) {
   const permissions = toSafePermissions(payload.permissions || []);
 
   if (payload.id) {
-    const existing = db.prepare('SELECT id, readonly FROM rbac_groups WHERE id = ?').get(payload.id);
+    const existing = db
+      .prepare('SELECT id, name, readonly FROM rbac_groups WHERE id = ?')
+      .get(payload.id);
     if (!existing) {
       throw new Error('分组不存在');
     }
-    if (Number(existing.readonly) === 1) {
+    if (
+      Number(existing.readonly) === 1 &&
+      String(existing.name) !== '查看权限组'
+    ) {
       throw new Error('系统内置分组不允许修改');
     }
 
     db.prepare(
       'UPDATE rbac_groups SET name = ?, description = ?, permissions = ?, updated_at = ? WHERE id = ?',
-    ).run(name, description, JSON.stringify(permissions), nowText(), payload.id);
+    ).run(
+      name,
+      description,
+      JSON.stringify(permissions),
+      nowText(),
+      payload.id,
+    );
 
     return listGroups().find((item) => item.id === payload.id) as RbacGroup;
   }
@@ -265,11 +429,15 @@ export function saveGroup(payload: Partial<RbacGroup>) {
   ).run(name, description, JSON.stringify(permissions), nowText(), nowText());
 
   const created = db.prepare('SELECT last_insert_rowid() as id').get();
-  return listGroups().find((item) => item.id === Number(created?.id)) as RbacGroup;
+  return listGroups().find(
+    (item) => item.id === Number(created?.id),
+  ) as RbacGroup;
 }
 
 export function deleteGroup(id: number) {
-  const target = db.prepare('SELECT id, readonly FROM rbac_groups WHERE id = ?').get(id);
+  const target = db
+    .prepare('SELECT id, readonly FROM rbac_groups WHERE id = ?')
+    .get(id);
   if (!target) {
     throw new Error('分组不存在');
   }
@@ -278,7 +446,9 @@ export function deleteGroup(id: number) {
   }
 
   const userCount = Number(
-    db.prepare('SELECT COUNT(1) as count FROM rbac_users WHERE group_id = ?').get(id)?.count || 0,
+    db
+      .prepare('SELECT COUNT(1) as count FROM rbac_users WHERE group_id = ?')
+      .get(id)?.count || 0,
   );
   if (userCount > 0) {
     throw new Error('该分组下仍有用户，无法删除');
@@ -290,7 +460,7 @@ export function deleteGroup(id: number) {
 export function listUsers() {
   const rows = db
     .prepare(
-      `SELECT u.id, u.username, u.real_name, u.role, u.group_id, u.enabled, u.home_path, g.name as group_name
+      `SELECT u.id, u.username, u.email, u.real_name, u.role, u.group_id, u.enabled, u.home_path, g.name as group_name
        FROM rbac_users u
        LEFT JOIN rbac_groups g ON g.id = u.group_id
        ORDER BY u.id ASC`,
@@ -298,21 +468,80 @@ export function listUsers() {
     .all();
 
   return rows.map((row: any) => ({
-    enabled: Number(row.enabled) === 1,
-    groupId: Number(row.group_id),
-    groupName: row.group_name || '',
-    homePath: String(row.home_path || ""),
-    id: Number(row.id),
-    realName: String(row.real_name || ""),
-    roles: [String(row.role)],
-    username: String(row.username || ""),
+    ...toSafeUser(row),
+    groupName: String(row.group_name || ''),
   }));
+}
+
+export function queryUsers(query: {
+  enabled?: '' | 'false' | 'true';
+  groupId?: number;
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+  role?: '' | 'admin' | 'super' | 'user';
+}) {
+  const where: string[] = [];
+  const params: any[] = [];
+
+  if (query.role) {
+    where.push('u.role = ?');
+    params.push(query.role);
+  }
+
+  if (query.enabled === 'false') {
+    where.push('u.enabled = 0');
+  } else if (query.enabled === 'true') {
+    where.push('u.enabled = 1');
+  }
+
+  const groupId = Number(query.groupId || 0);
+  if (groupId > 0) {
+    where.push('u.group_id = ?');
+    params.push(groupId);
+  }
+
+  const keyword = String(query.keyword || '').trim();
+  if (keyword) {
+    where.push('(u.username LIKE ? OR u.email LIKE ? OR u.real_name LIKE ?)');
+    const fuzzy = `%${keyword}%`;
+    params.push(fuzzy, fuzzy, fuzzy);
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const total = Number(
+    db
+      .prepare(`SELECT COUNT(1) as count FROM rbac_users u ${whereClause}`)
+      .get(...params)?.count || 0,
+  );
+
+  const page = Math.max(1, Number(query.page || 1));
+  const pageSize = Math.max(1, Math.min(200, Number(query.pageSize || 20)));
+  const offset = (page - 1) * pageSize;
+
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.username, u.email, u.real_name, u.role, u.group_id, u.enabled, u.home_path, g.name as group_name
+       FROM rbac_users u
+       LEFT JOIN rbac_groups g ON g.id = u.group_id
+       ${whereClause}
+       ORDER BY u.id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params, pageSize, offset);
+
+  const list = rows.map((row: any) => ({
+    ...toSafeUser(row),
+    groupName: String(row.group_name || ''),
+  }));
+
+  return { list, page, pageSize, total };
 }
 
 export function getUserByUsername(username: string): null | RbacUser {
   const row = db
     .prepare(
-      'SELECT id, username, password, real_name, role, group_id, enabled, home_path FROM rbac_users WHERE username = ? LIMIT 1',
+      'SELECT id, username, email, password, real_name, role, group_id, enabled, home_path FROM rbac_users WHERE username = ? LIMIT 1',
     )
     .get(username);
 
@@ -321,19 +550,38 @@ export function getUserByUsername(username: string): null | RbacUser {
   }
 
   return {
-    enabled: Number(row.enabled) === 1,
-    groupId: Number(row.group_id),
-    homePath: String(row.home_path || ""),
-    id: Number(row.id),
-    password: String(row.password || ""),
-    realName: String(row.real_name || ""),
-    roles: [String(row.role)],
-    username: String(row.username || ""),
+    ...toSafeUser(row),
+    password: String(row.password || ''),
   };
 }
 
-export function findAuthUser(username: string, password: string) {
-  const user = getUserByUsername(username);
+export function getUserByEmail(email: string): null | RbacUser {
+  const normalized = normalizeEmail(email);
+  if (!normalized) {
+    return null;
+  }
+
+  const row = db
+    .prepare(
+      'SELECT id, username, email, password, real_name, role, group_id, enabled, home_path FROM rbac_users WHERE email = ? LIMIT 1',
+    )
+    .get(normalized);
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...toSafeUser(row),
+    password: String(row.password || ''),
+  };
+}
+
+export function findAuthUser(account: string, password: string) {
+  const normalized = String(account || '').trim();
+  const user = normalized.includes('@')
+    ? getUserByEmail(normalized)
+    : getUserByUsername(normalized);
   if (!user) {
     return null;
   }
@@ -345,6 +593,7 @@ export function findAuthUser(username: string, password: string) {
 
 export function saveUser(payload: Partial<RbacUser>) {
   const username = String(payload.username || '').trim();
+  const email = normalizeEmail(payload.email);
   const realName = String(payload.realName || '').trim();
   const groupId = Number(payload.groupId || 0);
   const role = String(payload.roles?.[0] || 'user');
@@ -352,17 +601,28 @@ export function saveUser(payload: Partial<RbacUser>) {
   if (!username) {
     throw new Error('用户名不能为空');
   }
+  if (!isValidUsername(username)) {
+    throw new Error('用户名需为4-32位，仅支持字母、数字、_、-、.');
+  }
+  if (!email) {
+    throw new Error('邮箱不能为空');
+  }
+  if (!isValidEmail(email)) {
+    throw new Error('邮箱格式不正确');
+  }
   if (!realName) {
     throw new Error('姓名不能为空');
   }
   if (!groupId) {
     throw new Error('用户组不能为空');
   }
-  if (!['super', 'admin', 'user'].includes(role)) {
+  if (!['admin', 'super', 'user'].includes(role)) {
     throw new Error('角色不合法');
   }
 
-  const groupExists = db.prepare('SELECT id FROM rbac_groups WHERE id = ?').get(groupId);
+  const groupExists = db
+    .prepare('SELECT id FROM rbac_groups WHERE id = ?')
+    .get(groupId);
   if (!groupExists) {
     throw new Error('用户组不存在');
   }
@@ -370,7 +630,7 @@ export function saveUser(payload: Partial<RbacUser>) {
   if (payload.id !== undefined && payload.id !== null) {
     const existing = db
       .prepare(
-        'SELECT id, username, role, password FROM rbac_users WHERE id = ? LIMIT 1',
+        'SELECT id, username, email, role, password FROM rbac_users WHERE id = ? LIMIT 1',
       )
       .get(payload.id);
     if (!existing) {
@@ -380,13 +640,30 @@ export function saveUser(payload: Partial<RbacUser>) {
       throw new Error('超级管理员账号角色不可降级');
     }
 
+    const usernameExists = db
+      .prepare(
+        'SELECT id FROM rbac_users WHERE username = ? AND id <> ? LIMIT 1',
+      )
+      .get(username, payload.id);
+    if (usernameExists) {
+      throw new Error('用户名已存在');
+    }
+
+    const emailExists = db
+      .prepare('SELECT id FROM rbac_users WHERE email = ? AND id <> ? LIMIT 1')
+      .get(email, payload.id);
+    if (emailExists) {
+      throw new Error('邮箱已存在');
+    }
+
     db.prepare(
       `UPDATE rbac_users
-       SET username = ?, real_name = ?, role = ?, group_id = ?, enabled = ?,
+       SET username = ?, email = ?, real_name = ?, role = ?, group_id = ?, enabled = ?,
            home_path = ?, password = ?, updated_at = ?
        WHERE id = ?`,
     ).run(
       username,
+      email,
       realName,
       role,
       groupId,
@@ -405,18 +682,21 @@ export function saveUser(payload: Partial<RbacUser>) {
   }
 
   const existed = db
-    .prepare('SELECT id FROM rbac_users WHERE username = ? LIMIT 1')
-    .get(username);
+    .prepare(
+      'SELECT id FROM rbac_users WHERE username = ? OR email = ? LIMIT 1',
+    )
+    .get(username, email);
   if (existed) {
-    throw new Error('用户名已存在');
+    throw new Error('用户名或邮箱已存在');
   }
 
   db.prepare(
     `INSERT INTO rbac_users
-     (username, password, real_name, role, group_id, enabled, home_path, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (username, email, password, real_name, role, group_id, enabled, home_path, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     username,
+    email,
     String(payload.password),
     realName,
     role,
@@ -427,12 +707,16 @@ export function saveUser(payload: Partial<RbacUser>) {
     nowText(),
   );
 
-  const createdId = Number(db.prepare('SELECT last_insert_rowid() as id').get()?.id || 0);
+  const createdId = Number(
+    db.prepare('SELECT last_insert_rowid() as id').get()?.id || 0,
+  );
   return listUsers().find((item) => item.id === createdId);
 }
 
 export function deleteUser(id: number) {
-  const target = db.prepare('SELECT id, role FROM rbac_users WHERE id = ?').get(id);
+  const target = db
+    .prepare('SELECT id, role FROM rbac_users WHERE id = ?')
+    .get(id);
   if (!target) {
     throw new Error('用户不存在');
   }
@@ -440,6 +724,356 @@ export function deleteUser(id: number) {
     throw new Error('超级管理员账号不可删除');
   }
   db.prepare('DELETE FROM rbac_users WHERE id = ?').run(id);
+}
+
+export function setUserEnabled(id: number, enabled: boolean) {
+  const target = db
+    .prepare('SELECT id, role FROM rbac_users WHERE id = ? LIMIT 1')
+    .get(id);
+  if (!target) {
+    throw new Error('用户不存在');
+  }
+
+  if (String(target.role) === 'super' && !enabled) {
+    throw new Error('超级管理员账号不可禁用');
+  }
+
+  db.prepare(
+    'UPDATE rbac_users SET enabled = ?, updated_at = ? WHERE id = ?',
+  ).run(enabled ? 1 : 0, nowText(), id);
+
+  return listUsers().find((item) => item.id === id);
+}
+
+function getDefaultUserGroupId() {
+  const viewGroup = db
+    .prepare('SELECT id FROM rbac_groups WHERE name = ? LIMIT 1')
+    .get('查看权限组');
+  if (viewGroup?.id) {
+    return Number(viewGroup.id);
+  }
+
+  const firstGroup = db
+    .prepare('SELECT id FROM rbac_groups ORDER BY id ASC LIMIT 1')
+    .get();
+  if (firstGroup?.id) {
+    return Number(firstGroup.id);
+  }
+
+  throw new Error('默认用户组不存在，请联系管理员');
+}
+
+function randomDigits(length = 6) {
+  let code = '';
+  for (let index = 0; index < length; index += 1) {
+    code += `${Math.floor(Math.random() * 10)}`;
+  }
+  return code;
+}
+
+export function getNotificationSettings(): NotificationSettings {
+  const row = db
+    .prepare(
+      `SELECT smtp_host, smtp_port, smtp_username, smtp_password, use_ssl, from_email, from_name, subject_template, body_template
+       FROM notification_settings WHERE id = 1 LIMIT 1`,
+    )
+    .get();
+
+  const settings: NotificationSettings = {
+    bodyTemplate: String(row?.body_template || DEFAULT_NOTIFY_BODY),
+    configured: false,
+    fromEmail: normalizeEmail(row?.from_email),
+    fromName: String(row?.from_name || ''),
+    smtpHost: String(row?.smtp_host || '').trim(),
+    smtpPassword: String(row?.smtp_password || ''),
+    smtpPort: Number(row?.smtp_port || 465),
+    smtpUsername: String(row?.smtp_username || '').trim(),
+    subjectTemplate: String(row?.subject_template || DEFAULT_NOTIFY_SUBJECT),
+    useSSL: Number(row?.use_ssl ?? 1) === 1,
+  };
+
+  settings.configured = Boolean(
+    settings.smtpHost &&
+    settings.smtpPort &&
+    settings.smtpUsername &&
+    settings.smtpPassword &&
+    settings.fromEmail &&
+    settings.fromName,
+  );
+
+  return settings;
+}
+
+export function saveNotificationSettings(
+  payload: Partial<NotificationSettings>,
+) {
+  const smtpHost = String(payload.smtpHost || '').trim();
+  const smtpPort = Number(payload.smtpPort || 0);
+  const smtpUsername = String(payload.smtpUsername || '').trim();
+  const smtpPassword = String(payload.smtpPassword || '').trim();
+  const fromEmail = normalizeEmail(payload.fromEmail);
+  const fromName = String(payload.fromName || '').trim();
+  const subjectTemplate = String(payload.subjectTemplate || '').trim();
+  const bodyTemplate = String(payload.bodyTemplate || '').trim();
+  const useSSL = payload.useSSL !== false;
+
+  if (!smtpHost) {
+    throw new Error('SMTP Host 不能为空');
+  }
+  if (!smtpPort || smtpPort < 1 || smtpPort > 65_535) {
+    throw new Error('SMTP Port 不合法');
+  }
+  if (!smtpUsername) {
+    throw new Error('SMTP Username 不能为空');
+  }
+  if (!smtpPassword) {
+    throw new Error('SMTP Password 不能为空');
+  }
+  if (!fromEmail || !isValidEmail(fromEmail)) {
+    throw new Error('From Email 格式不正确');
+  }
+  if (!fromName) {
+    throw new Error('From Name 不能为空');
+  }
+  if (!subjectTemplate) {
+    throw new Error('Subject 模板不能为空');
+  }
+  if (!bodyTemplate) {
+    throw new Error('Body 模板不能为空');
+  }
+
+  db.prepare(
+    `UPDATE notification_settings
+     SET smtp_host = ?, smtp_port = ?, smtp_username = ?, smtp_password = ?,
+         use_ssl = ?, from_email = ?, from_name = ?,
+         subject_template = ?, body_template = ?, updated_at = ?
+     WHERE id = 1`,
+  ).run(
+    smtpHost,
+    smtpPort,
+    smtpUsername,
+    smtpPassword,
+    useSSL ? 1 : 0,
+    fromEmail,
+    fromName,
+    subjectTemplate,
+    bodyTemplate,
+    nowText(),
+  );
+
+  return getNotificationSettings();
+}
+
+function sendEmailBySettings(options: {
+  appName: string;
+  bodyTemplate?: string;
+  code: string;
+  email: string;
+  minutes: number;
+  subjectTemplate?: string;
+}) {
+  const settings = getNotificationSettings();
+  if (!settings.configured) {
+    throw new Error('邮箱配置未完成，请联系管理员配置');
+  }
+
+  const variables = {
+    app_name: options.appName,
+    code: options.code,
+    minutes: options.minutes,
+  };
+
+  const subject = fillTemplate(
+    options.subjectTemplate || settings.subjectTemplate,
+    variables,
+  );
+  const body = fillTemplate(
+    options.bodyTemplate || settings.bodyTemplate,
+    variables,
+  );
+
+  const require = createRequire(import.meta.url);
+  let nodemailer: any;
+  try {
+    nodemailer = require('nodemailer');
+  } catch {
+    throw new Error('邮件依赖缺失，请安装 nodemailer 后重试');
+  }
+
+  const transporter = nodemailer.createTransport({
+    auth: {
+      pass: settings.smtpPassword,
+      user: settings.smtpUsername,
+    },
+    host: settings.smtpHost,
+    port: settings.smtpPort,
+    secure: settings.useSSL,
+  });
+
+  return transporter.sendMail({
+    from: `${settings.fromName} <${settings.fromEmail}>`,
+    subject,
+    text: body,
+    to: options.email,
+  });
+}
+
+export async function sendRegisterEmailCode(payload: {
+  appName: string;
+  email: string;
+  minutes?: number;
+}) {
+  const email = normalizeEmail(payload.email);
+  if (!email || !isValidEmail(email)) {
+    throw new Error('邮箱格式不正确');
+  }
+
+  const settings = getNotificationSettings();
+  if (!settings.configured) {
+    throw new Error('邮箱配置未完成，请联系管理员配置');
+  }
+
+  const exists = getUserByEmail(email);
+  if (exists) {
+    throw new Error('该邮箱已注册');
+  }
+
+  const minutes = Math.max(1, Math.min(30, Number(payload.minutes || 10)));
+  const code = randomDigits(6);
+  const now = nowText();
+  const expiresAt = formatDateByMinutes(minutes);
+
+  db.prepare(
+    'UPDATE email_verification_codes SET used = 1 WHERE scene = ? AND email = ? AND used = 0',
+  ).run('register', email);
+
+  db.prepare(
+    'INSERT INTO email_verification_codes (scene, email, code, expires_at, used, created_at) VALUES (?, ?, ?, ?, 0, ?)',
+  ).run('register', email, code, expiresAt, now);
+
+  await sendEmailBySettings({
+    appName: payload.appName,
+    code,
+    email,
+    minutes,
+  });
+
+  return { email, expiresAt };
+}
+
+export async function testNotificationSettings(payload: {
+  appName: string;
+  testEmail: string;
+}) {
+  const email = normalizeEmail(payload.testEmail);
+  if (!email || !isValidEmail(email)) {
+    throw new Error('测试邮箱格式不正确');
+  }
+
+  const code = randomDigits(6);
+  await sendEmailBySettings({
+    appName: payload.appName,
+    code,
+    email,
+    minutes: 10,
+    subjectTemplate: '【{{app_name}}】邮件配置测试',
+    bodyTemplate:
+      '你好，\n\n这是 {{app_name}} 的邮件配置测试邮件。\n验证码样例：{{code}}，有效期 {{minutes}} 分钟。\n\n如果你收到此邮件，说明配置可用。',
+  });
+
+  return true;
+}
+
+function consumeRegisterCode(email: string, code: string) {
+  const row = db
+    .prepare(
+      `SELECT id, code, expires_at, used
+       FROM email_verification_codes
+       WHERE scene = 'register' AND email = ?
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(email);
+
+  if (!row) {
+    throw new Error('验证码不存在，请先获取验证码');
+  }
+  if (Number(row.used) === 1) {
+    throw new Error('验证码已使用，请重新获取');
+  }
+  if (String(row.code) !== code) {
+    throw new Error('验证码错误');
+  }
+
+  const expiresTime = Date.parse(String(row.expires_at).replace(' ', 'T'));
+  if (Number.isNaN(expiresTime) || expiresTime < Date.now()) {
+    throw new Error('验证码已过期，请重新获取');
+  }
+
+  db.prepare('UPDATE email_verification_codes SET used = 1 WHERE id = ?').run(
+    row.id,
+  );
+}
+
+function createUsernameFromEmail(email: string) {
+  const prefixRaw = email.split('@')[0] || 'user';
+  const prefix = prefixRaw.replaceAll(/[^\w.-]/g, '').slice(0, 24) || 'user';
+  const base = prefix.length >= 4 ? prefix : `${prefix}user`;
+
+  for (let index = 0; index < 1000; index += 1) {
+    const suffix =
+      index === 0 ? '' : `${Math.floor(Math.random() * 9000) + 1000}`;
+    const username = `${base}${suffix}`.slice(0, 32);
+    if (!getUserByUsername(username)) {
+      return username;
+    }
+  }
+
+  throw new Error('自动生成用户名失败，请重试');
+}
+
+export function registerByEmail(payload: {
+  code: string;
+  confirmPassword: string;
+  email: string;
+  password: string;
+}) {
+  const email = normalizeEmail(payload.email);
+  const code = String(payload.code || '').trim();
+  const password = String(payload.password || '');
+  const confirmPassword = String(payload.confirmPassword || '');
+
+  if (!email || !isValidEmail(email)) {
+    throw new Error('邮箱格式不正确');
+  }
+  if (!code || code.length !== 6) {
+    throw new Error('验证码格式不正确');
+  }
+  if (!password || password.length < 6) {
+    throw new Error('密码至少6位');
+  }
+  if (password !== confirmPassword) {
+    throw new Error('两次密码输入不一致');
+  }
+  if (getUserByEmail(email)) {
+    throw new Error('该邮箱已注册');
+  }
+
+  consumeRegisterCode(email, code);
+
+  const username = createUsernameFromEmail(email);
+  const groupId = getDefaultUserGroupId();
+
+  const created = saveUser({
+    email,
+    enabled: true,
+    groupId,
+    password,
+    realName: username,
+    roles: ['user'],
+    username,
+  });
+
+  return created;
 }
 
 export function getUserAccessCodes(username: string) {
@@ -502,6 +1136,14 @@ export function getUserMenus(username: string) {
   }
 
   const systemChildren: any[] = [];
+  if (isSuper && has('MX_USER_VIEW')) {
+    systemChildren.push({
+      component: '/system-config/user-manage/index',
+      meta: { affixTab: false, title: '用户管理' },
+      name: 'SystemUserManage',
+      path: '/system-config/user-manage',
+    });
+  }
   if (isSuper && has('MX_RBAC_VIEW')) {
     systemChildren.push({
       component: '/maixu/rbac/index',
@@ -510,7 +1152,15 @@ export function getUserMenus(username: string) {
       path: '/system-config/rbac',
     });
   }
-  if (isSuper || has('MX_OPLOG_VIEW')) {
+  if (isSuper && has('MX_NOTIFY_VIEW')) {
+    systemChildren.push({
+      component: '/system-config/notify-settings/index',
+      meta: { affixTab: false, title: '通知设置' },
+      name: 'SystemNotifySettings',
+      path: '/system-config/notify-settings',
+    });
+  }
+  if (has('MX_OPLOG_VIEW')) {
     systemChildren.push({
       component: '/system-config/operation-log/index',
       meta: { affixTab: false, title: '操作日志' },
@@ -599,8 +1249,8 @@ export function listOperationLogs(query: {
   end?: string;
   keyword?: string;
   page?: number;
-  pageSize?: number;
   pageName?: string;
+  pageSize?: number;
   start?: string;
   username?: string;
 }) {
@@ -628,7 +1278,9 @@ export function listOperationLogs(query: {
     params.push(query.end);
   }
   if (query.keyword) {
-    where.push('(username LIKE ? OR page LIKE ? OR action LIKE ? OR detail_json LIKE ?)');
+    where.push(
+      '(username LIKE ? OR page LIKE ? OR action LIKE ? OR detail_json LIKE ?)',
+    );
     const keyword = `%${query.keyword}%`;
     params.push(keyword, keyword, keyword, keyword);
   }
@@ -662,7 +1314,7 @@ export function listOperationLogs(query: {
     id: Number(row.id),
     page: row.page,
     role: row.role,
-    username: String(row.username || ""),
+    username: String(row.username || ''),
   }));
 
   return { list, page, pageSize, total };
@@ -670,14 +1322,22 @@ export function listOperationLogs(query: {
 
 export function saveOperationLog(
   id: null | number,
-  payload: { action: string; detailJson: string; page: string; role: string; username: string },
+  payload: {
+    action: string;
+    detailJson: string;
+    page: string;
+    role: string;
+    username: string;
+  },
 ) {
   if (!payload.username || !payload.page || !payload.action) {
     throw new Error('username/page/action 不能为空');
   }
 
   if (id) {
-    const existing = db.prepare('SELECT id FROM operation_logs WHERE id = ?').get(id);
+    const existing = db
+      .prepare('SELECT id FROM operation_logs WHERE id = ?')
+      .get(id);
     if (!existing) {
       throw new Error('日志不存在');
     }
@@ -709,7 +1369,9 @@ export function saveOperationLog(
 }
 
 export function deleteOperationLog(id: number) {
-  const existing = db.prepare('SELECT id FROM operation_logs WHERE id = ?').get(id);
+  const existing = db
+    .prepare('SELECT id FROM operation_logs WHERE id = ?')
+    .get(id);
   if (!existing) {
     throw new Error('日志不存在');
   }

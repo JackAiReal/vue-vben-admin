@@ -133,6 +133,7 @@ catalog:
   medium-zoom: ^1.1.0
   naive-ui: ^2.43.2
   nitropack: ^2.13.1
+  nodemailer: ^7.0.10
   nprogress: ^0.2.0
   ora: ^8.2.0
   pinia: ^3.0.4

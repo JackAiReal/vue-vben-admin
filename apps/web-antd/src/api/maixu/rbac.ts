@@ -15,6 +15,7 @@ export interface PermissionGroup {
 }
 
 export interface RbacUser {
+  email?: string;
   enabled: boolean;
   groupId: number;
   groupName?: string;
@@ -33,6 +34,7 @@ export interface SaveGroupPayload {
 }
 
 export interface SaveUserPayload {
+  email?: string;
   enabled?: boolean;
   groupId: number;
   homePath?: string;

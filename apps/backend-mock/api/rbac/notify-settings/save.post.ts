@@ -1,6 +1,6 @@
 import { eventHandler, readBody } from 'h3';
 import { verifyAccessToken } from '~/utils/jwt-utils';
-import { deleteUser } from '~/utils/rbac-store';
+import { saveNotificationSettings } from '~/utils/rbac-store';
 import {
   forbiddenResponse,
   unAuthorizedResponse,
@@ -14,20 +14,16 @@ export default eventHandler(async (event) => {
     return unAuthorizedResponse(event);
   }
   if (!user.roles.includes('super')) {
-    return forbiddenResponse(event, '仅超级管理员可访问');
+    return forbiddenResponse(event, '仅超级管理员可操作');
   }
 
   try {
     const body = await readBody(event);
-    const id = Number(body?.id || 0);
-    if (!id) {
-      return useResponseError('id 不能为空');
-    }
-    deleteUser(id);
-    return useResponseSuccess({ id });
+    const data = saveNotificationSettings(body || {});
+    return useResponseSuccess(data);
   } catch (error) {
     return useResponseError(
-      error instanceof Error ? error.message : '删除失败',
+      error instanceof Error ? error.message : '保存失败',
     );
   }
 });

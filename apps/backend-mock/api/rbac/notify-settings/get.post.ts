@@ -1,6 +1,6 @@
 import { eventHandler } from 'h3';
 import { verifyAccessToken } from '~/utils/jwt-utils';
-import { listGroups } from '~/utils/rbac-store';
+import { getNotificationSettings } from '~/utils/rbac-store';
 import {
   forbiddenResponse,
   unAuthorizedResponse,
@@ -16,5 +16,5 @@ export default eventHandler((event) => {
     return forbiddenResponse(event, '仅超级管理员可访问');
   }
 
-  return useResponseSuccess(listGroups());
+  return useResponseSuccess(getNotificationSettings());
 });

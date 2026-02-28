@@ -1,6 +1,12 @@
 <script lang="ts" setup>
 import type { TableColumnsType } from 'ant-design-vue';
 
+import type {
+  PermissionDef,
+  PermissionGroup,
+  RbacUser,
+} from '#/api/maixu/rbac';
+
 import { computed, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
@@ -11,15 +17,16 @@ import {
   Card,
   Checkbox,
   Input,
+  message,
   Modal,
   Popconfirm,
   Select,
   Space,
   Table,
   Tag,
-  message,
 } from 'ant-design-vue';
 
+import { appendOperationLog } from '#/api/maixu/operation-log';
 import {
   deletePermissionGroup,
   deleteRbacUser,
@@ -28,14 +35,12 @@ import {
   fetchRbacUsers,
   savePermissionGroup,
   saveRbacUser,
-  type PermissionDef,
-  type PermissionGroup,
-  type RbacUser,
 } from '#/api/maixu/rbac';
-import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const userStore = useUserStore();
-const isSuper = computed(() => (userStore.userInfo?.roles || []).includes('super'));
+const isSuper = computed(() =>
+  (userStore.userInfo?.roles || []).includes('super'),
+);
 
 const loading = ref(false);
 const permissionDefs = ref<PermissionDef[]>([]);
@@ -44,7 +49,7 @@ const users = ref<RbacUser[]>([]);
 
 const groupModalOpen = ref(false);
 const savingGroup = ref(false);
-const editingGroup = ref<PermissionGroup | null>(null);
+const editingGroup = ref<null | PermissionGroup>(null);
 const groupForm = reactive({
   description: '',
   name: '',
@@ -53,8 +58,9 @@ const groupForm = reactive({
 
 const userModalOpen = ref(false);
 const savingUser = ref(false);
-const editingUser = ref<RbacUser | null>(null);
+const editingUser = ref<null | RbacUser>(null);
 const userForm = reactive({
+  email: '',
   enabled: true,
   groupId: 0,
   password: '',
@@ -72,7 +78,13 @@ const roleOptions = [
 const groupColumns: TableColumnsType<PermissionGroup> = [
   { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
   { title: '分组名称', dataIndex: 'name', key: 'name', width: 180 },
-  { title: '描述', dataIndex: 'description', key: 'description', width: 220, ellipsis: true },
+  {
+    title: '描述',
+    dataIndex: 'description',
+    key: 'description',
+    width: 220,
+    ellipsis: true,
+  },
   { title: '权限数量', key: 'count', width: 110 },
   { title: '系统内置', key: 'readonly', width: 110 },
   { title: '操作', key: 'actions', width: 140, fixed: 'right' },
@@ -81,6 +93,13 @@ const groupColumns: TableColumnsType<PermissionGroup> = [
 const userColumns: TableColumnsType<RbacUser> = [
   { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
   { title: '账号', dataIndex: 'username', key: 'username', width: 140 },
+  {
+    title: '邮箱',
+    dataIndex: 'email',
+    key: 'email',
+    width: 220,
+    ellipsis: true,
+  },
   { title: '姓名', dataIndex: 'realName', key: 'realName', width: 140 },
   { title: '角色', key: 'role', width: 120 },
   { title: '用户组', dataIndex: 'groupName', key: 'groupName', width: 180 },
@@ -95,7 +114,7 @@ const groupedPermissionDefs = computed(() => {
     list.push(item);
     map.set(item.category, list);
   }
-  return Array.from(map.entries());
+  return [...map.entries()];
 });
 
 const groupOptions = computed(() =>
@@ -163,7 +182,11 @@ async function submitGroup() {
       permissions: groupForm.permissions,
     });
     groupModalOpen.value = false;
-    await appendOperationLog('系统配置/权限分组管理', editingGroup.value ? '修改权限组' : '新增权限组', { name: groupForm.name, permissions: groupForm.permissions });
+    await appendOperationLog(
+      '系统配置/权限分组管理',
+      editingGroup.value ? '修改权限组' : '新增权限组',
+      { name: groupForm.name, permissions: groupForm.permissions },
+    );
     message.success('分组保存成功');
     await loadData();
   } catch (error) {
@@ -176,7 +199,10 @@ async function submitGroup() {
 async function removeGroup(record: PermissionGroup) {
   try {
     await deletePermissionGroup(record.id);
-    await appendOperationLog('系统配置/权限分组管理', '删除权限组', { id: record.id, name: record.name });
+    await appendOperationLog('系统配置/权限分组管理', '删除权限组', {
+      id: record.id,
+      name: record.name,
+    });
     message.success('分组删除成功');
     await loadData();
   } catch (error) {
@@ -187,6 +213,7 @@ async function removeGroup(record: PermissionGroup) {
 function openCreateUser() {
   editingUser.value = null;
   userForm.username = '';
+  userForm.email = '';
   userForm.realName = '';
   userForm.password = '';
   userForm.groupId = groupOptions.value[0]?.value || 0;
@@ -198,6 +225,7 @@ function openCreateUser() {
 function openEditUser(record: RbacUser) {
   editingUser.value = record;
   userForm.username = record.username;
+  userForm.email = record.email || '';
   userForm.realName = record.realName;
   userForm.password = '';
   userForm.groupId = record.groupId;
@@ -209,6 +237,10 @@ function openEditUser(record: RbacUser) {
 async function submitUser() {
   if (!userForm.username.trim() || !userForm.realName.trim()) {
     message.warning('账号和姓名不能为空');
+    return;
+  }
+  if (!userForm.email.trim()) {
+    message.warning('邮箱不能为空');
     return;
   }
   if (!editingUser.value && !userForm.password.trim()) {
@@ -223,6 +255,7 @@ async function submitUser() {
   savingUser.value = true;
   try {
     await saveRbacUser({
+      email: userForm.email.trim(),
       enabled: userForm.enabled,
       groupId: userForm.groupId,
       id: editingUser.value?.id,
@@ -232,7 +265,15 @@ async function submitUser() {
       username: userForm.username.trim(),
     });
     userModalOpen.value = false;
-    await appendOperationLog('系统配置/权限分组管理', editingUser.value ? '修改账号' : '新增账号', { username: userForm.username, role: userForm.role, groupId: userForm.groupId });
+    await appendOperationLog(
+      '系统配置/权限分组管理',
+      editingUser.value ? '修改账号' : '新增账号',
+      {
+        username: userForm.username,
+        role: userForm.role,
+        groupId: userForm.groupId,
+      },
+    );
     message.success('用户保存成功');
     await loadData();
   } catch (error) {
@@ -245,7 +286,10 @@ async function submitUser() {
 async function removeUser(record: RbacUser) {
   try {
     await deleteRbacUser(record.id);
-    await appendOperationLog('系统配置/权限分组管理', '删除账号', { id: record.id, username: record.username });
+    await appendOperationLog('系统配置/权限分组管理', '删除账号', {
+      id: record.id,
+      username: record.username,
+    });
     message.success('用户删除成功');
     await loadData();
   } catch (error) {
@@ -257,7 +301,10 @@ loadData();
 </script>
 
 <template>
-  <Page title="权限分组管理" description="超级管理员可维护权限组，并将管理员/普通用户分配到对应用户组。">
+  <Page
+    title="权限分组管理"
+    description="超级管理员可维护权限组，并将管理员/普通用户分配到对应用户组。"
+  >
     <Card v-if="!isSuper">
       当前账号不是超级管理员，仅可查看业务页面，无法进入权限管理。
     </Card>
@@ -267,7 +314,14 @@ loadData();
         <div class="mb-3">
           <Button type="primary" @click="openCreateGroup">新增权限组</Button>
         </div>
-        <Table :columns="groupColumns" :data-source="groups" :loading="loading" :pagination="false" row-key="id" :scroll="{ x: 900 }">
+        <Table
+          :columns="groupColumns"
+          :data-source="groups"
+          :loading="loading"
+          :pagination="false"
+          row-key="id"
+          :scroll="{ x: 900 }"
+        >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'count'">
               {{ (asGroup(record).permissions || []).length }}
@@ -279,9 +333,29 @@ loadData();
             </template>
             <template v-else-if="column.key === 'actions'">
               <Space>
-                <Button size="small" type="link" :disabled="asGroup(record).readonly" @click="openEditGroup(asGroup(record))">修改</Button>
-                <Popconfirm title="确认删除该分组吗？" @confirm="removeGroup(asGroup(record))">
-                  <Button size="small" type="link" danger :disabled="asGroup(record).readonly">删除</Button>
+                <Button
+                  size="small"
+                  type="link"
+                  :disabled="
+                    asGroup(record).readonly &&
+                    asGroup(record).name !== '查看权限组'
+                  "
+                  @click="openEditGroup(asGroup(record))"
+                >
+                  修改
+                </Button>
+                <Popconfirm
+                  title="确认删除该分组吗？"
+                  @confirm="removeGroup(asGroup(record))"
+                >
+                  <Button
+                    size="small"
+                    type="link"
+                    danger
+                    :disabled="asGroup(record).readonly"
+                  >
+                    删除
+                  </Button>
                 </Popconfirm>
               </Space>
             </template>
@@ -293,10 +367,19 @@ loadData();
         <div class="mb-3">
           <Button type="primary" @click="openCreateUser">新增账号</Button>
         </div>
-        <Table :columns="userColumns" :data-source="users" :loading="loading" :pagination="false" row-key="id" :scroll="{ x: 980 }">
+        <Table
+          :columns="userColumns"
+          :data-source="users"
+          :loading="loading"
+          :pagination="false"
+          row-key="id"
+          :scroll="{ x: 980 }"
+        >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'role'">
-              <Tag color="purple">{{ asRbacUser(record).roles?.[0] || '-' }}</Tag>
+              <Tag color="purple">
+                {{ asRbacUser(record).roles?.[0] || '-' }}
+              </Tag>
             </template>
             <template v-else-if="column.key === 'enabled'">
               <Tag :color="asRbacUser(record).enabled ? 'green' : 'red'">
@@ -305,9 +388,25 @@ loadData();
             </template>
             <template v-else-if="column.key === 'actions'">
               <Space>
-                <Button size="small" type="link" @click="openEditUser(asRbacUser(record))">修改</Button>
-                <Popconfirm title="确认删除该账号吗？" @confirm="removeUser(asRbacUser(record))">
-                  <Button size="small" type="link" danger :disabled="asRbacUser(record).roles?.includes('super')">删除</Button>
+                <Button
+                  size="small"
+                  type="link"
+                  @click="openEditUser(asRbacUser(record))"
+                >
+                  修改
+                </Button>
+                <Popconfirm
+                  title="确认删除该账号吗？"
+                  @confirm="removeUser(asRbacUser(record))"
+                >
+                  <Button
+                    size="small"
+                    type="link"
+                    danger
+                    :disabled="asRbacUser(record).roles?.includes('super')"
+                  >
+                    删除
+                  </Button>
                 </Popconfirm>
               </Space>
             </template>
@@ -316,30 +415,62 @@ loadData();
       </Card>
     </template>
 
-    <Modal v-model:open="groupModalOpen" :confirm-loading="savingGroup" :title="editingGroup ? '修改权限组' : '新增权限组'" width="760px" @ok="submitGroup">
+    <Modal
+      v-model:open="groupModalOpen"
+      :confirm-loading="savingGroup"
+      :title="editingGroup ? '修改权限组' : '新增权限组'"
+      width="760px"
+      @ok="submitGroup"
+    >
       <div class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         <Input v-model:value="groupForm.name" placeholder="分组名称" />
         <Input v-model:value="groupForm.description" placeholder="分组描述" />
       </div>
-      <div v-for="[category, perms] in groupedPermissionDefs" :key="category" class="mb-3">
-        <div class="mb-1 font-medium">{{ category }}</div>
-        <Checkbox.Group v-model:value="groupForm.permissions">
+      <Checkbox.Group v-model:value="groupForm.permissions">
+        <div
+          v-for="[category, perms] in groupedPermissionDefs"
+          :key="category"
+          class="mb-3"
+        >
+          <div class="mb-1 font-medium">{{ category }}</div>
           <div class="grid grid-cols-1 gap-1 md:grid-cols-2">
             <Checkbox v-for="perm in perms" :key="perm.code" :value="perm.code">
               {{ perm.label }}
             </Checkbox>
           </div>
-        </Checkbox.Group>
-      </div>
+        </div>
+      </Checkbox.Group>
     </Modal>
 
-    <Modal v-model:open="userModalOpen" :confirm-loading="savingUser" :title="editingUser ? '修改账号' : '新增账号'" width="640px" @ok="submitUser">
+    <Modal
+      v-model:open="userModalOpen"
+      :confirm-loading="savingUser"
+      :title="editingUser ? '修改账号' : '新增账号'"
+      width="640px"
+      @ok="submitUser"
+    >
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Input v-model:value="userForm.username" placeholder="账号" :disabled="!!editingUser" />
+        <Input
+          v-model:value="userForm.username"
+          placeholder="账号"
+          :disabled="!!editingUser"
+        />
+        <Input v-model:value="userForm.email" placeholder="邮箱" />
         <Input v-model:value="userForm.realName" placeholder="姓名" />
-        <Input v-model:value="userForm.password" :placeholder="editingUser ? '密码(留空不修改)' : '密码'" />
-        <Select v-model:value="userForm.role" :options="roleOptions" placeholder="角色" />
-        <Select v-model:value="userForm.groupId" :options="groupOptions" placeholder="用户组" />
+        <Input
+          v-model:value="userForm.password"
+          :placeholder="editingUser ? '密码(留空不修改)' : '密码'"
+        />
+        <Select
+          v-model:value="userForm.role"
+          :options="roleOptions"
+          placeholder="角色"
+        />
+        <Select
+          v-model:value="userForm.groupId"
+          :options="groupOptions"
+          placeholder="用户组"
+        />
         <Checkbox v-model:checked="userForm.enabled" class="pt-2">
           启用账号
         </Checkbox>

@@ -7,8 +7,8 @@ export interface MaixuRoomItem {
   room_name: string;
   room_wxid: string;
   room_config: MaixuRoomConfig;
-  update_time: string;
   status?: number;
+  update_time: string;
 }
 
 export interface UpdateRoomConfigPayload {
@@ -38,6 +38,18 @@ function safeParseJson(raw: string) {
   }
 }
 
+function tryDecodeBase64Json(raw: string) {
+  if (typeof atob !== 'function') {
+    return null;
+  }
+  try {
+    const decoded = atob(raw);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
 function normalizeRoomConfig(value: unknown): MaixuRoomConfig {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as MaixuRoomConfig;
@@ -53,19 +65,69 @@ function normalizeRoomConfig(value: unknown): MaixuRoomConfig {
   return {};
 }
 
-function normalizeRoom(value: any): MaixuRoomItem {
+function unwrapRoomPayload(raw: any) {
+  let value = raw;
+  if (typeof value === 'string') {
+    value = safeParseJson(value) ?? tryDecodeBase64Json(value) ?? value;
+  }
+
+  if (
+    value &&
+    typeof value === 'object' &&
+    value.data &&
+    typeof value.data === 'object'
+  ) {
+    return value.data;
+  }
+
+  return value;
+}
+
+function cleanText(value: unknown) {
+  if (typeof value === 'string') {
+    return value.replaceAll(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value)
+    .replaceAll(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+}
+
+function normalizeTextValue(value: unknown, fallback = '') {
+  const cleaned = cleanText(value);
+  if (cleaned) {
+    return cleaned;
+  }
+  return cleanText(fallback);
+}
+
+function normalizeRoom(
+  value: any,
+  fallback: Partial<MaixuRoomItem> = {},
+): MaixuRoomItem {
+  let status: number | undefined;
+  if (typeof value?.status === 'number') {
+    status = value.status;
+  } else if (typeof fallback.status === 'number') {
+    status = fallback.status;
+  }
+
   return {
-    id: value?.id,
-    room_name: String(value?.room_name ?? ''),
-    room_wxid: String(value?.room_wxid ?? ''),
-    room_config: normalizeRoomConfig(value?.room_config),
-    update_time: String(value?.update_time ?? ''),
-    status: typeof value?.status === 'number' ? value.status : undefined,
+    id: value?.id ?? fallback.id,
+    room_name: normalizeTextValue(value?.room_name, fallback.room_name),
+    room_wxid: normalizeTextValue(value?.room_wxid, fallback.room_wxid),
+    room_config: normalizeRoomConfig(
+      value?.room_config ?? fallback.room_config,
+    ),
+    status,
+    update_time: normalizeTextValue(value?.update_time, fallback.update_time),
   };
 }
 
 function sortRoomsByUpdateTimeDesc(rooms: MaixuRoomItem[]) {
-  return [...rooms].sort((left, right) => {
+  return rooms.toSorted((left, right) => {
     const leftTime = Date.parse(left.update_time.replace(' ', 'T')) || 0;
     const rightTime = Date.parse(right.update_time.replace(' ', 'T')) || 0;
     return rightTime - leftTime;
@@ -77,7 +139,7 @@ async function requestJson(path: string, init?: RequestInit) {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
+      ...init?.headers,
     },
   });
 
@@ -109,23 +171,36 @@ export async function updateMaixuRoomConfig(payload: UpdateRoomConfigPayload) {
     method: 'POST',
   });
 
-  return normalizeRoom(raw);
+  const roomPayload = unwrapRoomPayload(raw);
+  return normalizeRoom(roomPayload, {
+    room_config: payload.room_config,
+    room_name: payload.room_name,
+    room_wxid: payload.room_wxid,
+  });
 }
 
 export async function updateMaixuRoomConfigItem(
   roomWxid: string,
   item: string,
   value: unknown,
+  fallback?: Partial<MaixuRoomItem>,
 ) {
   const query = new URLSearchParams({
     admin: 'true',
     room_wxid: roomWxid,
   });
 
-  const raw = await requestJson(`/v1/room_super/update_item?${query.toString()}`, {
-    body: JSON.stringify({ item, value }),
-    method: 'POST',
-  });
+  const raw = await requestJson(
+    `/v1/room_super/update_item?${query.toString()}`,
+    {
+      body: JSON.stringify({ item, value }),
+      method: 'POST',
+    },
+  );
 
-  return normalizeRoom(raw);
+  const roomPayload = unwrapRoomPayload(raw);
+  return normalizeRoom(roomPayload, {
+    ...fallback,
+    room_wxid: roomWxid,
+  });
 }
