@@ -4,6 +4,7 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue';
 import { computed, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
   Button,
@@ -32,6 +33,9 @@ import {
   updateMaixuRoomConfig,
   updateMaixuRoomConfigItem,
 } from '#/api/maixu/room';
+
+const accessStore = useAccessStore();
+const userStore = useUserStore();
 
 const loading = ref(false);
 const rooms = ref<MaixuRoomItem[]>([]);
@@ -72,6 +76,18 @@ const memberForm = ref({
   sex: 0,
   wxid: '',
 });
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditRoom = computed(() => hasCode('MX_ROOM_EDIT'));
+const canViewMembers = computed(() => hasCode('MX_MEMBER_VIEW'));
+const canEditMembers = computed(() => hasCode('MX_MEMBER_EDIT'));
 
 function parseDateString(value: string) {
   const timestamp = Date.parse(value.replace(' ', 'T'));
@@ -264,6 +280,10 @@ function openConfigModal(record: MaixuRoomItem) {
 }
 
 async function saveConfig() {
+  if (!canEditRoom.value) {
+    message.warning('当前账号无修改群配置权限');
+    return;
+  }
   if (!selectedRoom.value) {
     return;
   }
@@ -303,6 +323,10 @@ function openDelayModal(record: MaixuRoomItem) {
 }
 
 async function extendRoomExpireTime() {
+  if (!canEditRoom.value) {
+    message.warning('当前账号无修改群配置权限');
+    return;
+  }
   if (!selectedRoom.value) {
     return;
   }
@@ -346,6 +370,10 @@ async function extendRoomExpireTime() {
 }
 
 async function setRoomRunning(record: MaixuRoomItem, running: boolean) {
+  if (!canEditRoom.value) {
+    message.warning('当前账号无修改群配置权限');
+    return;
+  }
   try {
     const updated = await updateMaixuRoomConfigItem(record.room_wxid, 'isStart', running);
     const config = {
@@ -394,6 +422,10 @@ async function loadMembers(page = memberPaginationCurrent.value, pageSize = memb
 }
 
 function openMembersModal(record: MaixuRoomItem) {
+  if (!canViewMembers.value) {
+    message.warning('当前账号无查看群成员权限');
+    return;
+  }
   selectedRoom.value = record;
   memberKeyword.value = '';
   memberPaginationCurrent.value = 1;
@@ -402,6 +434,10 @@ function openMembersModal(record: MaixuRoomItem) {
 }
 
 function openMemberCreateModal() {
+  if (!canEditMembers.value) {
+    message.warning('当前账号无编辑群成员权限');
+    return;
+  }
   if (!selectedRoom.value) {
     return;
   }
@@ -421,6 +457,10 @@ function openMemberCreateModal() {
 }
 
 function openMemberEditModal(record: WxRoomMember) {
+  if (!canEditMembers.value) {
+    message.warning('当前账号无编辑群成员权限');
+    return;
+  }
   editingMember.value = record;
   memberForm.value = {
     account: record.account || '',
@@ -437,6 +477,10 @@ function openMemberEditModal(record: WxRoomMember) {
 }
 
 async function saveMember() {
+  if (!canEditMembers.value) {
+    message.warning('当前账号无编辑群成员权限');
+    return;
+  }
   if (!selectedRoom.value) {
     return;
   }
@@ -465,6 +509,10 @@ async function saveMember() {
 }
 
 async function removeMember(record: WxRoomMember) {
+  if (!canEditMembers.value) {
+    message.warning('当前账号无编辑群成员权限');
+    return;
+  }
   try {
     const msg = await deleteWxRoomMember(record.id);
     message.success(msg);
@@ -556,11 +604,11 @@ loadRooms();
               <Button type="link">操作</Button>
               <template #overlay>
                 <Menu @click="({ key }) => handleAction(String(key), asRoom(record))">
-                  <Menu.Item key="config">配置</Menu.Item>
-                  <Menu.Item key="members">加载群成员</Menu.Item>
-                  <Menu.Item key="delay">延长时间</Menu.Item>
-                  <Menu.Item v-if="isRoomStarted(asRoom(record))" key="pause">暂停</Menu.Item>
-                  <Menu.Item v-else key="resume">恢复</Menu.Item>
+                  <Menu.Item key="config" :disabled="!canEditRoom">配置</Menu.Item>
+                  <Menu.Item key="members" :disabled="!canViewMembers">加载群成员</Menu.Item>
+                  <Menu.Item key="delay" :disabled="!canEditRoom">延长时间</Menu.Item>
+                  <Menu.Item v-if="isRoomStarted(asRoom(record))" key="pause" :disabled="!canEditRoom">暂停</Menu.Item>
+                  <Menu.Item v-else key="resume" :disabled="!canEditRoom">恢复</Menu.Item>
                 </Menu>
               </template>
             </Dropdown>
@@ -621,7 +669,7 @@ loadRooms();
           @press-enter="() => loadMembers(1, memberPaginationPageSize)"
         />
         <Button type="primary" @click="loadMembers(1, memberPaginationPageSize)">查询</Button>
-        <Button @click="openMemberCreateModal">新增成员</Button>
+        <Button :disabled="!canEditMembers" @click="openMemberCreateModal">新增成员</Button>
       </div>
 
       <Table
@@ -636,9 +684,9 @@ loadRooms();
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
             <Space>
-              <Button size="small" type="link" @click="openMemberEditModal(asMember(record))">修改</Button>
+              <Button size="small" type="link" :disabled="!canEditMembers" @click="openMemberEditModal(asMember(record))">修改</Button>
               <Popconfirm title="确认删除该成员吗？" @confirm="removeMember(asMember(record))">
-                <Button danger size="small" type="link">删除</Button>
+                <Button danger size="small" type="link" :disabled="!canEditMembers">删除</Button>
               </Popconfirm>
             </Space>
           </template>

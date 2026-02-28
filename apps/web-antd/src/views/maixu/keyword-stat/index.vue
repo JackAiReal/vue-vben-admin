@@ -5,6 +5,7 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue';
 import { computed, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import dayjs from 'dayjs';
 import {
@@ -32,6 +33,9 @@ import {
 } from '#/api/maixu/keyword-stat';
 
 const { RangePicker } = DatePicker;
+
+const accessStore = useAccessStore();
+const userStore = useUserStore();
 
 const loading = ref(false);
 const rows = ref<KeywordStatRecord[]>([]);
@@ -85,6 +89,16 @@ const tablePagination = computed<TablePaginationConfig>(() => ({
   showTotal: (value) => `共 ${value} 条`,
   total: total.value,
 }));
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditKeyword = computed(() => hasCode('MX_KEYWORD_EDIT'));
 
 const formModalOpen = ref(false);
 const formSaving = ref(false);
@@ -191,6 +205,10 @@ async function onExport() {
 }
 
 function openCreateModal() {
+  if (!canEditKeyword.value) {
+    message.warning('当前账号无编辑关键词统计权限');
+    return;
+  }
   editingRecord.value = null;
   formState.tag_room = queryState.roomWxid.trim();
   formState.date = queryState.date || dayjs().format('YYYY-MM-DD');
@@ -204,6 +222,10 @@ function openCreateModal() {
 }
 
 function openEditModal(row: KeywordStatRecord) {
+  if (!canEditKeyword.value) {
+    message.warning('当前账号无编辑关键词统计权限');
+    return;
+  }
   editingRecord.value = row;
   formState.tag_room = row.tag_room;
   formState.date = row.date;
@@ -217,6 +239,10 @@ function openEditModal(row: KeywordStatRecord) {
 }
 
 async function submitForm() {
+  if (!canEditKeyword.value) {
+    message.warning('当前账号无编辑关键词统计权限');
+    return;
+  }
   if (!formState.tag_room.trim() || !formState.tag_type.trim() || !formState.tag_one.trim()) {
     message.warning('群ID、关键字类型、成员ID不能为空');
     return;
@@ -246,6 +272,10 @@ async function submitForm() {
 }
 
 async function onDelete(row: KeywordStatRecord) {
+  if (!canEditKeyword.value) {
+    message.warning('当前账号无编辑关键词统计权限');
+    return;
+  }
   try {
     const msg = await deleteKeywordStatById(row.id);
     message.success(msg);
@@ -271,7 +301,7 @@ async function onDelete(row: KeywordStatRecord) {
         <Button type="primary" @click="loadData(1, paginationPageSize)">查询</Button>
         <Button @click="resetFilters">重置筛选</Button>
         <Button @click="onExport">导出Excel</Button>
-        <Button type="dashed" @click="openCreateModal">新增</Button>
+        <Button type="dashed" :disabled="!canEditKeyword" @click="openCreateModal">新增</Button>
       </Space>
     </Card>
 
@@ -283,9 +313,9 @@ async function onDelete(row: KeywordStatRecord) {
           </template>
           <template v-else-if="column.key === 'actions'">
             <Space>
-              <Button size="small" type="link" @click="openEditModal(asRow(record))">修改</Button>
+              <Button size="small" type="link" :disabled="!canEditKeyword" @click="openEditModal(asRow(record))">修改</Button>
               <Popconfirm title="确认删除这条记录吗？" @confirm="onDelete(asRow(record))">
-                <Button size="small" danger type="link">删除</Button>
+                <Button size="small" danger type="link" :disabled="!canEditKeyword">删除</Button>
               </Popconfirm>
             </Space>
           </template>
@@ -293,7 +323,7 @@ async function onDelete(row: KeywordStatRecord) {
       </Table>
     </Card>
 
-    <Modal v-model:open="formModalOpen" :confirm-loading="formSaving" :title="editingRecord ? '修改关键字统计' : '新增关键字统计'" width="700px" @ok="submitForm">
+    <Modal v-model:open="formModalOpen" :confirm-loading="formSaving" :ok-button-props="{ disabled: !canEditKeyword }" :title="editingRecord ? '修改关键字统计' : '新增关键字统计'" width="700px" @ok="submitForm">
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Input v-model:value="formState.tag_room" placeholder="群ID" />
         <Input v-model:value="formState.date" placeholder="日期 YYYY-MM-DD" />

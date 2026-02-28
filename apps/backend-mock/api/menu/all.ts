@@ -1,6 +1,6 @@
 import { eventHandler } from 'h3';
 import { verifyAccessToken } from '~/utils/jwt-utils';
-import { MOCK_MENUS } from '~/utils/mock-data';
+import { getUserMenus } from '~/utils/rbac-store';
 import { unAuthorizedResponse, useResponseSuccess } from '~/utils/response';
 
 export default eventHandler(async (event) => {
@@ -9,7 +9,6 @@ export default eventHandler(async (event) => {
     return unAuthorizedResponse(event);
   }
 
-  const menus =
-    MOCK_MENUS.find((item) => item.username === userinfo.username)?.menus ?? [];
+  const menus = getUserMenus(userinfo.username);
   return useResponseSuccess(menus);
 });

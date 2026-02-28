@@ -1,6 +1,6 @@
 import { eventHandler } from 'h3';
 import { verifyAccessToken } from '~/utils/jwt-utils';
-import { MOCK_CODES } from '~/utils/mock-data';
+import { getUserAccessCodes } from '~/utils/rbac-store';
 import { unAuthorizedResponse, useResponseSuccess } from '~/utils/response';
 
 export default eventHandler((event) => {
@@ -9,8 +9,7 @@ export default eventHandler((event) => {
     return unAuthorizedResponse(event);
   }
 
-  const codes =
-    MOCK_CODES.find((item) => item.username === userinfo.username)?.codes ?? [];
+  const codes = getUserAccessCodes(userinfo.username);
 
   return useResponseSuccess(codes);
 });

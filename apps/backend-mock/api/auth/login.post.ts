@@ -4,7 +4,7 @@ import {
   setRefreshTokenCookie,
 } from '~/utils/cookie-utils';
 import { generateAccessToken, generateRefreshToken } from '~/utils/jwt-utils';
-import { MOCK_USERS } from '~/utils/mock-data';
+import { findAuthUser } from '~/utils/rbac-store';
 import {
   forbiddenResponse,
   useResponseError,
@@ -21,9 +21,7 @@ export default defineEventHandler(async (event) => {
     );
   }
 
-  const findUser = MOCK_USERS.find(
-    (item) => item.username === username && item.password === password,
-  );
+  const findUser = findAuthUser(username, password);
 
   if (!findUser) {
     clearRefreshTokenCookie(event);

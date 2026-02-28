@@ -5,6 +5,7 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue';
 import { computed, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
   Button,
@@ -31,6 +32,9 @@ import {
 } from '#/api/maixu/top-card';
 
 const { RangePicker } = DatePicker;
+
+const accessStore = useAccessStore();
+const userStore = useUserStore();
 
 const loading = ref(false);
 const rows = ref<TopCardRecord[]>([]);
@@ -83,6 +87,16 @@ const tablePagination = computed<TablePaginationConfig>(() => ({
   showTotal: (value) => `共 ${value} 条`,
   total: total.value,
 }));
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditTop = computed(() => hasCode('MX_TOP_EDIT'));
 
 const formModalOpen = ref(false);
 const formSaving = ref(false);
@@ -188,6 +202,10 @@ async function onExport() {
 }
 
 function openCreateModal() {
+  if (!canEditTop.value) {
+    message.warning('当前账号无编辑置顶卡权限');
+    return;
+  }
   editingRecord.value = null;
   formState.room_wxid = queryState.roomWxid.trim();
   formState.room_name = '';
@@ -202,6 +220,10 @@ function openCreateModal() {
 }
 
 function openEditModal(row: TopCardRecord) {
+  if (!canEditTop.value) {
+    message.warning('当前账号无编辑置顶卡权限');
+    return;
+  }
   editingRecord.value = row;
   formState.room_wxid = row.room_wxid;
   formState.room_name = row.room_name;
@@ -216,6 +238,10 @@ function openEditModal(row: TopCardRecord) {
 }
 
 async function submitForm() {
+  if (!canEditTop.value) {
+    message.warning('当前账号无编辑置顶卡权限');
+    return;
+  }
   if (!formState.room_wxid.trim() || !formState.room_name.trim()) {
     message.warning('群ID和群名称不能为空');
     return;
@@ -250,6 +276,10 @@ async function submitForm() {
 }
 
 async function onDelete(row: TopCardRecord) {
+  if (!canEditTop.value) {
+    message.warning('当前账号无编辑置顶卡权限');
+    return;
+  }
   try {
     const msg = await deleteTopCardById(row.id);
     message.success(msg);
@@ -275,7 +305,7 @@ async function onDelete(row: TopCardRecord) {
         <Button type="primary" @click="loadData(1, paginationPageSize)">查询</Button>
         <Button @click="resetFilters">重置筛选</Button>
         <Button @click="onExport">导出Excel</Button>
-        <Button type="dashed" @click="openCreateModal">新增</Button>
+        <Button type="dashed" :disabled="!canEditTop" @click="openCreateModal">新增</Button>
       </Space>
     </Card>
 
@@ -287,9 +317,9 @@ async function onDelete(row: TopCardRecord) {
           </template>
           <template v-else-if="column.key === 'actions'">
             <Space>
-              <Button size="small" type="link" @click="openEditModal(asRow(record))">修改</Button>
+              <Button size="small" type="link" :disabled="!canEditTop" @click="openEditModal(asRow(record))">修改</Button>
               <Popconfirm title="确认删除这条置顶卡记录吗？" @confirm="onDelete(asRow(record))">
-                <Button size="small" danger type="link">删除</Button>
+                <Button size="small" danger type="link" :disabled="!canEditTop">删除</Button>
               </Popconfirm>
             </Space>
           </template>
@@ -297,7 +327,7 @@ async function onDelete(row: TopCardRecord) {
       </Table>
     </Card>
 
-    <Modal v-model:open="formModalOpen" :confirm-loading="formSaving" :title="editingRecord ? '修改置顶卡' : '新增置顶卡'" width="760px" @ok="submitForm">
+    <Modal v-model:open="formModalOpen" :confirm-loading="formSaving" :ok-button-props="{ disabled: !canEditTop }" :title="editingRecord ? '修改置顶卡' : '新增置顶卡'" width="760px" @ok="submitForm">
       <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Input v-model:value="formState.room_wxid" placeholder="群ID" />
         <Input v-model:value="formState.room_name" placeholder="群名称" />

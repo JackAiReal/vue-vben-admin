@@ -5,6 +5,7 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue';
 import { computed, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import dayjs from 'dayjs';
 import {
@@ -32,6 +33,9 @@ import {
 } from '#/api/maixu/order-query';
 
 const { RangePicker } = DatePicker;
+
+const accessStore = useAccessStore();
+const userStore = useUserStore();
 
 const loading = ref(false);
 const rows = ref<RoomOrderRecord[]>([]);
@@ -103,6 +107,16 @@ const tablePagination = computed<TablePaginationConfig>(() => ({
   showTotal: (value) => `共 ${value} 条`,
   total: total.value,
 }));
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditOrder = computed(() => hasCode('MX_ORDER_EDIT'));
 
 function asRow(record: Record<string, any>) {
   return record as RoomOrderRecord;
@@ -202,6 +216,10 @@ async function onExportExcel() {
 }
 
 function openCreateModal() {
+  if (!canEditOrder.value) {
+    message.warning('当前账号无编辑麦序记录权限');
+    return;
+  }
   editingRecordId.value = null;
   formState.room_wxid = queryState.roomWxid.trim();
   formState.room_name = '';
@@ -214,6 +232,10 @@ function openCreateModal() {
 }
 
 function openEditModal(record: RoomOrderRecord) {
+  if (!canEditOrder.value) {
+    message.warning('当前账号无编辑麦序记录权限');
+    return;
+  }
   editingRecordId.value = record.id;
   formState.room_wxid = record.room_wxid;
   formState.room_name = record.room_name;
@@ -234,6 +256,10 @@ function parseWxidsText(value: string) {
 }
 
 async function submitForm() {
+  if (!canEditOrder.value) {
+    message.warning('当前账号无编辑麦序记录权限');
+    return;
+  }
   if (!formState.room_wxid.trim()) {
     message.warning('群ID不能为空');
     return;
@@ -291,6 +317,10 @@ async function submitForm() {
 }
 
 async function onDelete(record: RoomOrderRecord) {
+  if (!canEditOrder.value) {
+    message.warning('当前账号无编辑麦序记录权限');
+    return;
+  }
   try {
     const msg = await deleteRoomOrderById(record.id);
     message.success(msg);
@@ -351,7 +381,7 @@ async function onDelete(record: RoomOrderRecord) {
         <Button type="primary" @click="loadData(1, paginationPageSize)">查询</Button>
         <Button @click="resetFilters">重置筛选</Button>
         <Button @click="onExportExcel">导出Excel</Button>
-        <Button type="dashed" @click="openCreateModal">新增麦序</Button>
+        <Button type="dashed" :disabled="!canEditOrder" @click="openCreateModal">新增麦序</Button>
       </Space>
     </Card>
 
@@ -388,12 +418,12 @@ async function onDelete(record: RoomOrderRecord) {
 
           <template v-else-if="column.key === 'actions'">
             <Space>
-              <Button size="small" type="link" @click="openEditModal(asRow(record))">修改</Button>
+              <Button size="small" type="link" :disabled="!canEditOrder" @click="openEditModal(asRow(record))">修改</Button>
               <Popconfirm
                 title="确认删除这条麦序数据吗？"
                 @confirm="onDelete(asRow(record))"
               >
-                <Button danger size="small" type="link">删除</Button>
+                <Button danger size="small" type="link" :disabled="!canEditOrder">删除</Button>
               </Popconfirm>
             </Space>
           </template>
@@ -404,6 +434,7 @@ async function onDelete(record: RoomOrderRecord) {
     <Modal
       v-model:open="formModalOpen"
       :confirm-loading="formSaving"
+      :ok-button-props="{ disabled: !canEditOrder }"
       :title="isEditing ? '修改麦序数据' : '新增麦序数据'"
       width="620px"
       @ok="submitForm"
