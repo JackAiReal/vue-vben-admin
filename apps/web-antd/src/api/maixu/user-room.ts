@@ -1,3 +1,5 @@
+import { fetchMaixu } from './request';
+
 export interface UserRoomBindingItem {
   createdAt?: string;
   roomName: string;
@@ -14,19 +16,6 @@ export interface ConsumeBindCodeResult {
   roomWxid: string;
   sourceWxid?: string;
   username?: string;
-}
-
-function getApiBaseUrl() {
-  const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-
-  return 'http://127.0.0.1:5000';
 }
 
 function safeParseJson(raw: string) {
@@ -58,13 +47,7 @@ function readSuccessData(parsed: any) {
 }
 
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await fetchMaixu(path, init);
 
   const text = await response.text();
   const parsed = text ? safeParseJson(text) : null;

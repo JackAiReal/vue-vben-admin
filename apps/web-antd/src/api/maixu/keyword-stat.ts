@@ -1,3 +1,5 @@
+import { fetchMaixu } from './request';
+
 export interface KeywordStatRecord {
   date: string;
   id: number;
@@ -42,19 +44,6 @@ export interface KeywordStatSavePayload {
   update_time?: string;
 }
 
-function getApiBaseUrl() {
-  const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-
-  return 'http://127.0.0.1:5000';
-}
-
 function safeJsonParse(text: string) {
   try {
     return JSON.parse(text);
@@ -79,13 +68,7 @@ function normalizeRecord(value: any): KeywordStatRecord {
 }
 
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await fetchMaixu(path, init);
 
   const text = await response.text();
   const parsed = text ? safeJsonParse(text) : null;
@@ -155,7 +138,7 @@ export async function deleteKeywordStatById(id: number) {
 }
 
 export async function exportKeywordStatsExcel(params: KeywordStatQueryParams) {
-  const response = await fetch(`${getApiBaseUrl()}/v1/tag_total/export_excel?admin=true`, {
+  const response = await fetchMaixu('/v1/tag_total/export_excel?admin=true', {
     body: JSON.stringify({
       date: params.date,
       end: params.end,
@@ -165,9 +148,6 @@ export async function exportKeywordStatsExcel(params: KeywordStatQueryParams) {
       tag_room: params.roomWxid,
       tag_type: params.tagType,
     }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
     method: 'POST',
   });
 

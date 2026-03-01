@@ -1,3 +1,5 @@
+import { fetchMaixu } from './request';
+
 export interface TopCardRecord {
   alan_name: string;
   alan_wxid: string;
@@ -45,19 +47,6 @@ export interface TopCardSavePayload {
   update_time?: string;
 }
 
-function getApiBaseUrl() {
-  const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-
-  return 'http://127.0.0.1:5000';
-}
-
 function safeJsonParse(text: string) {
   try {
     return JSON.parse(text);
@@ -85,13 +74,7 @@ function normalizeRecord(value: any): TopCardRecord {
 }
 
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await fetchMaixu(path, init);
 
   const text = await response.text();
   const parsed = text ? safeJsonParse(text) : null;
@@ -160,7 +143,7 @@ export async function deleteTopCardById(id: number) {
 }
 
 export async function exportTopCardsExcel(params: TopCardQueryParams) {
-  const response = await fetch(`${getApiBaseUrl()}/v1/room_top/export_excel?admin=true`, {
+  const response = await fetchMaixu('/v1/room_top/export_excel?admin=true', {
     body: JSON.stringify({
       end: params.end,
       keyword_fields: params.keywordFields ?? [],
@@ -169,9 +152,6 @@ export async function exportTopCardsExcel(params: TopCardQueryParams) {
       start: params.start,
       top_type: params.topType,
     }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
     method: 'POST',
   });
 

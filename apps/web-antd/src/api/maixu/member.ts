@@ -1,3 +1,5 @@
+import { fetchMaixu } from './request';
+
 export interface WxRoomMember {
   id: number;
   wxid: string;
@@ -43,19 +45,6 @@ export interface SaveWxRoomMemberPayload {
   wxid: string;
 }
 
-function getApiBaseUrl() {
-  const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-
-  return 'http://127.0.0.1:5000';
-}
-
 function safeJsonParse(text: string) {
   try {
     return JSON.parse(text);
@@ -83,13 +72,7 @@ function normalizeMember(value: any): WxRoomMember {
 }
 
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await fetchMaixu(path, init);
 
   const text = await response.text();
   const parsed = text ? safeJsonParse(text) : null;

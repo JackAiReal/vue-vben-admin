@@ -1,3 +1,5 @@
+import { fetchMaixu } from './request';
+
 export interface MaixuRoomConfig {
   [key: string]: any;
 }
@@ -21,19 +23,6 @@ export interface UpdateRoomConfigRawPayload {
   room_config_raw: string;
   room_name: string;
   room_wxid: string;
-}
-
-function getApiBaseUrl() {
-  const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-
-  return 'http://127.0.0.1:5000';
 }
 
 function safeParseJson(raw: string) {
@@ -141,13 +130,7 @@ function sortRoomsByUpdateTimeDesc(rooms: MaixuRoomItem[]) {
 }
 
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  });
+  const response = await fetchMaixu(path, init);
 
   const text = await response.text();
   const parsed = text ? safeParseJson(text) : null;

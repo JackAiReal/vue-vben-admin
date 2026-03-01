@@ -1,3 +1,5 @@
+import { fetchMaixu } from './request';
+
 export interface RoomOrderRecord {
   id: number;
   room_name: string;
@@ -49,19 +51,6 @@ export interface UpdateRoomOrderPayload {
   type?: string;
   update_time?: string;
   wxids?: string[];
-}
-
-function getApiBaseUrl() {
-  const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
-  if (envBase && envBase.trim()) {
-    return envBase.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-
-  return 'http://127.0.0.1:5000';
 }
 
 function safeJsonParse(text: string) {
@@ -123,13 +112,7 @@ function normalizeRecord(value: any): RoomOrderRecord {
 }
 
 async function requestJson(path: string, init?: RequestInit) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await fetchMaixu(path, init);
 
   const text = await response.text();
   const parsed = text ? safeJsonParse(text) : null;
@@ -207,7 +190,7 @@ export async function deleteRoomOrderById(id: number) {
 }
 
 export async function exportRoomOrdersExcel(params: QueryRoomOrderParams) {
-  const response = await fetch(`${getApiBaseUrl()}/v1/room_list/export_excel?admin=true`, {
+  const response = await fetchMaixu('/v1/room_list/export_excel?admin=true', {
     body: JSON.stringify({
       date: params.date,
       end: params.end,
@@ -217,9 +200,6 @@ export async function exportRoomOrdersExcel(params: QueryRoomOrderParams) {
       start: params.start,
       type: params.type,
     }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
     method: 'POST',
   });
 

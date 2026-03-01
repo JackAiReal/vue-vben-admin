@@ -36,9 +36,9 @@ export function generateRefreshToken(user: JwtUserInfo) {
   });
 }
 
-export function verifyAccessToken(
+export function readAccessTokenFromAuthorization(
   event: H3Event<EventHandlerRequest>,
-): null | Omit<JwtUserInfo, 'password'> {
+) {
   const authHeader = getHeader(event, 'Authorization');
   if (!authHeader?.startsWith('Bearer')) {
     return null;
@@ -48,7 +48,18 @@ export function verifyAccessToken(
   if (tokenParts.length !== 2) {
     return null;
   }
-  const token = tokenParts[1] as string;
+
+  return tokenParts[1] as string;
+}
+
+export function verifyAccessToken(
+  event: H3Event<EventHandlerRequest>,
+): null | Omit<JwtUserInfo, 'password'> {
+  const token = readAccessTokenFromAuthorization(event);
+  if (!token) {
+    return null;
+  }
+
   try {
     const decoded = jwt.verify(
       token,
