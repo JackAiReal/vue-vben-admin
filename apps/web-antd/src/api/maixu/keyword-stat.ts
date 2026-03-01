@@ -182,7 +182,23 @@ export async function exportKeywordStatsExcel(params: KeywordStatQueryParams) {
 
   const blob = await response.blob();
   const disposition = response.headers.get('Content-Disposition') || '';
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-  const rawName = decodeURIComponent(match?.[1] || match?.[2] || 'keyword_stats_export.xlsx');
+
+  const utf8Match = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  const plainMatch = disposition.match(/filename\s*=\s*"?([^";]+)"?/i);
+
+  const encodedName = utf8Match?.[1] ? utf8Match[1].trim() : '';
+  const plainName = plainMatch?.[1] ? plainMatch[1].trim() : '';
+
+  let rawName = 'keyword_stats_export.xlsx';
+  if (encodedName) {
+    try {
+      rawName = decodeURIComponent(encodedName);
+    } catch {
+      rawName = encodedName;
+    }
+  } else if (plainName) {
+    rawName = plainName;
+  }
+
   return { blob, filename: rawName };
 }

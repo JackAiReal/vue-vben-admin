@@ -1,6 +1,7 @@
 import { eventHandler } from 'h3';
+
 import { verifyAccessToken } from '~/utils/jwt-utils';
-import { getNotificationSettings } from '~/utils/rbac-store';
+import { listUsers } from '~/utils/rbac-store';
 import { unAuthorizedResponse, useResponseSuccess } from '~/utils/response';
 
 export default eventHandler((event) => {
@@ -8,5 +9,11 @@ export default eventHandler((event) => {
   if (!user) {
     return unAuthorizedResponse(event);
   }
-  return useResponseSuccess(getNotificationSettings());
+
+  const emails = listUsers()
+    .filter((item) => (item.roles || []).includes('super'))
+    .map((item) => String(item.email || '').trim())
+    .filter((item) => item.includes('@'));
+
+  return useResponseSuccess([...new Set(emails)]);
 });

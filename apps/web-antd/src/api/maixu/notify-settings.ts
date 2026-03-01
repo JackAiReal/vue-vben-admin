@@ -1,6 +1,8 @@
 import { requestClient } from '#/api/request';
 
 export interface NotifySettings {
+  approvalBodyTemplate: string;
+  approvalSubjectTemplate: string;
   bodyTemplate: string;
   configured: boolean;
   fromEmail: string;
@@ -29,6 +31,16 @@ export async function testNotifySettings(
   appName = '麦序管理后台',
 ) {
   return requestClient.post<boolean>('/rbac/notify-settings/test', {
+    appName,
+    testEmail,
+  });
+}
+
+export async function testApprovalNotifySettings(
+  testEmail: string,
+  appName = '麦序管理后台',
+) {
+  return requestClient.post<boolean>('/rbac/notify-settings/test-approval', {
     appName,
     testEmail,
   });

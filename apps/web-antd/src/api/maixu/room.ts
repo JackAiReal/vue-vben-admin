@@ -17,6 +17,12 @@ export interface UpdateRoomConfigPayload {
   room_wxid: string;
 }
 
+export interface UpdateRoomConfigRawPayload {
+  room_config_raw: string;
+  room_name: string;
+  room_wxid: string;
+}
+
 function getApiBaseUrl() {
   const envBase = import.meta.env.VITE_GINGER_API_URL as string | undefined;
   if (envBase && envBase.trim()) {
@@ -156,13 +162,43 @@ async function requestJson(path: string, init?: RequestInit) {
   return parsed ?? text;
 }
 
+function normalizeRoomList(raw: unknown) {
+  const list: any[] = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && Array.isArray((raw as any).data)
+      ? (raw as any).data
+      : [];
+
+  return sortRoomsByUpdateTimeDesc(list.map((item) => normalizeRoom(item)));
+}
+
 export async function fetchMaixuRooms() {
   const raw = await requestJson('/v1/room_super/find_all_room?admin=true', {
     method: 'POST',
   });
 
-  const list = Array.isArray(raw) ? raw : [];
-  return sortRoomsByUpdateTimeDesc(list.map((item) => normalizeRoom(item)));
+  return normalizeRoomList(raw);
+}
+
+export async function fetchMaixuRoomsByIds(roomWxids: string[]) {
+  const roomIds = [...new Set(roomWxids.map((item) => cleanText(item)).filter(Boolean))];
+  if (roomIds.length === 0) {
+    return [];
+  }
+
+  const raw = await requestJson('/v1/room_super/find_config_room_ids?admin=true', {
+    body: JSON.stringify({ room_ids: roomIds }),
+    method: 'POST',
+  });
+
+  const roomMap = new Map<string, MaixuRoomItem>();
+  for (const room of normalizeRoomList(raw)) {
+    roomMap.set(room.room_wxid, room);
+  }
+
+  return roomIds
+    .map((roomWxid) => roomMap.get(roomWxid))
+    .filter((item): item is MaixuRoomItem => Boolean(item));
 }
 
 export async function updateMaixuRoomConfig(payload: UpdateRoomConfigPayload) {
@@ -174,6 +210,25 @@ export async function updateMaixuRoomConfig(payload: UpdateRoomConfigPayload) {
   const roomPayload = unwrapRoomPayload(raw);
   return normalizeRoom(roomPayload, {
     room_config: payload.room_config,
+    room_name: payload.room_name,
+    room_wxid: payload.room_wxid,
+  });
+}
+
+export async function updateMaixuRoomConfigRaw(
+  payload: UpdateRoomConfigRawPayload,
+) {
+  const body = `{"room_wxid":${JSON.stringify(payload.room_wxid)},"room_name":${JSON.stringify(payload.room_name)},"room_config":${payload.room_config_raw}}`;
+
+  const raw = await requestJson('/v1/room_super/update_all_config', {
+    body,
+    method: 'POST',
+  });
+
+  const roomPayload = unwrapRoomPayload(raw);
+  const parsedConfig = normalizeRoomConfig(safeParseJson(payload.room_config_raw));
+  return normalizeRoom(roomPayload, {
+    room_config: parsedConfig,
     room_name: payload.room_name,
     room_wxid: payload.room_wxid,
   });
@@ -203,4 +258,23 @@ export async function updateMaixuRoomConfigItem(
     ...fallback,
     room_wxid: roomWxid,
   });
+}
+
+export async function deleteMaixuRoom(roomWxid: string) {
+  const query = new URLSearchParams({
+    admin: 'true',
+    room_wxid: roomWxid,
+  });
+
+  const raw = await requestJson(
+    `/v1/room_super/delete_room?${query.toString()}`,
+    {
+      method: 'POST',
+    },
+  );
+
+  if (raw && typeof raw === 'object') {
+    return String((raw as any).message || (raw as any).msg || '删除成功');
+  }
+  return '删除成功';
 }

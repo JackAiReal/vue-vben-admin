@@ -31,6 +31,8 @@ export interface RbacUser {
 }
 
 export interface NotificationSettings {
+  approvalBodyTemplate: string;
+  approvalSubjectTemplate: string;
   bodyTemplate: string;
   configured: boolean;
   fromEmail: string;
@@ -57,6 +59,11 @@ const RBAC_PERMISSIONS: RbacPermission[] = [
   { category: '概览', code: 'MX_DASHBOARD_VIEW', label: '查看概览' },
   { category: '麦序群列表', code: 'MX_ROOM_VIEW', label: '查看群列表' },
   { category: '麦序群列表', code: 'MX_ROOM_EDIT', label: '编辑群配置/状态' },
+  {
+    category: '麦序机器人-用户',
+    code: 'MX_USER_ROOM_VIEW',
+    label: '查看用户群列表',
+  },
   { category: '群成员', code: 'MX_MEMBER_VIEW', label: '查看群成员' },
   { category: '群成员', code: 'MX_MEMBER_EDIT', label: '编辑群成员' },
   { category: '麦序查询', code: 'MX_ORDER_VIEW', label: '查看麦序查询' },
@@ -78,6 +85,7 @@ const RBAC_PERMISSIONS: RbacPermission[] = [
 const VIEW_ONLY_CODES = [
   'MX_DASHBOARD_VIEW',
   'MX_ROOM_VIEW',
+  'MX_USER_ROOM_VIEW',
   'MX_MEMBER_VIEW',
   'MX_ORDER_VIEW',
   'MX_KEYWORD_VIEW',
@@ -106,6 +114,23 @@ const DEFAULT_NOTIFY_BODY = [
   '验证码 {{minutes}} 分钟内有效，请勿泄露给他人。',
   '',
   '如果不是你本人操作，请忽略此邮件。',
+].join('\n');
+
+const DEFAULT_APPROVAL_SUBJECT =
+  '【审批提醒】{{type_label}}审批待处理：{{request_no}}';
+const DEFAULT_APPROVAL_BODY = [
+  '{{type_label}}申请{{action_text}}。',
+  '',
+  '审批单号：{{request_no}}',
+  '申请人：{{applicant_user}}',
+  '群ID：{{room_wxid}}',
+  '群昵称：{{room_name}}',
+  '当前过期时间：{{current_expire_time}}',
+  '目标过期时间：{{target_expire_time}}',
+  '申请理由：{{reason}}',
+  '提交时间：{{submitted_at}}',
+  '',
+  '请尽快处理。若 {{approve_timeout_hours}} 小时内未处理，系统将自动同意并执行。',
 ].join('\n');
 
 const DB_FILE = fileURLToPath(new URL('../.data/rbac.sqlite', import.meta.url));
@@ -162,6 +187,8 @@ CREATE TABLE IF NOT EXISTS notification_settings (
   from_name TEXT NOT NULL DEFAULT '',
   subject_template TEXT NOT NULL DEFAULT '',
   body_template TEXT NOT NULL DEFAULT '',
+  approval_subject_template TEXT NOT NULL DEFAULT '',
+  approval_body_template TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
 );
 
@@ -185,6 +212,16 @@ function ensureColumn(tableName: string, columnName: string, ddl: string) {
 }
 
 ensureColumn('rbac_users', 'email', "email TEXT NOT NULL DEFAULT ''");
+ensureColumn(
+  'notification_settings',
+  'approval_subject_template',
+  "approval_subject_template TEXT NOT NULL DEFAULT ''",
+);
+ensureColumn(
+  'notification_settings',
+  'approval_body_template',
+  "approval_body_template TEXT NOT NULL DEFAULT ''",
+);
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_rbac_users_email ON rbac_users(email)');
 db.exec(
@@ -343,13 +380,50 @@ function seedDefaults() {
   if (settingsCount === 0) {
     db.prepare(
       `INSERT INTO notification_settings
-       (id, smtp_host, smtp_port, smtp_username, smtp_password, use_ssl, from_email, from_name, subject_template, body_template, updated_at)
-       VALUES (1, '', 465, '', '', 1, '', '', ?, ?, ?)`,
-    ).run(DEFAULT_NOTIFY_SUBJECT, DEFAULT_NOTIFY_BODY, nowText());
+       (id, smtp_host, smtp_port, smtp_username, smtp_password, use_ssl, from_email, from_name, subject_template, body_template, approval_subject_template, approval_body_template, updated_at)
+       VALUES (1, '', 465, '', '', 1, '', '', ?, ?, ?, ?, ?)`,
+    ).run(
+      DEFAULT_NOTIFY_SUBJECT,
+      DEFAULT_NOTIFY_BODY,
+      DEFAULT_APPROVAL_SUBJECT,
+      DEFAULT_APPROVAL_BODY,
+      nowText(),
+    );
+  }
+}
+
+function ensureBuiltinGroupPermissions() {
+  const targets: Array<{ name: string; permissions: string[] }> = [
+    { name: '超级管理员组', permissions: ALL_CODES },
+    { name: '查看权限组', permissions: VIEW_ONLY_CODES },
+    { name: '可修改权限组', permissions: EDITOR_CODES },
+  ];
+
+  for (const target of targets) {
+    const row = db
+      .prepare('SELECT id, permissions FROM rbac_groups WHERE name = ? LIMIT 1')
+      .get(target.name);
+
+    if (!row?.id) {
+      continue;
+    }
+
+    const current = parsePermissions(String(row.permissions || '[]'));
+    const merged = [...new Set([...current, ...target.permissions])];
+    const noChange =
+      merged.length === current.length &&
+      merged.every((item) => current.includes(item));
+
+    if (!noChange) {
+      db.prepare(
+        'UPDATE rbac_groups SET permissions = ?, updated_at = ? WHERE id = ?',
+      ).run(JSON.stringify(merged), nowText(), row.id);
+    }
   }
 }
 
 seedDefaults();
+ensureBuiltinGroupPermissions();
 
 db.exec(
   "UPDATE rbac_users SET email = username || '@example.com' WHERE email = ''",
@@ -774,12 +848,20 @@ function randomDigits(length = 6) {
 export function getNotificationSettings(): NotificationSettings {
   const row = db
     .prepare(
-      `SELECT smtp_host, smtp_port, smtp_username, smtp_password, use_ssl, from_email, from_name, subject_template, body_template
+      `SELECT smtp_host, smtp_port, smtp_username, smtp_password, use_ssl,
+              from_email, from_name, subject_template, body_template,
+              approval_subject_template, approval_body_template
        FROM notification_settings WHERE id = 1 LIMIT 1`,
     )
     .get();
 
   const settings: NotificationSettings = {
+    approvalBodyTemplate: String(
+      row?.approval_body_template || DEFAULT_APPROVAL_BODY,
+    ),
+    approvalSubjectTemplate: String(
+      row?.approval_subject_template || DEFAULT_APPROVAL_SUBJECT,
+    ),
     bodyTemplate: String(row?.body_template || DEFAULT_NOTIFY_BODY),
     configured: false,
     fromEmail: normalizeEmail(row?.from_email),
@@ -815,6 +897,10 @@ export function saveNotificationSettings(
   const fromName = String(payload.fromName || '').trim();
   const subjectTemplate = String(payload.subjectTemplate || '').trim();
   const bodyTemplate = String(payload.bodyTemplate || '').trim();
+  const approvalSubjectTemplate = String(
+    payload.approvalSubjectTemplate || '',
+  ).trim();
+  const approvalBodyTemplate = String(payload.approvalBodyTemplate || '').trim();
   const useSSL = payload.useSSL !== false;
 
   if (!smtpHost) {
@@ -841,12 +927,20 @@ export function saveNotificationSettings(
   if (!bodyTemplate) {
     throw new Error('Body 模板不能为空');
   }
+  if (!approvalSubjectTemplate) {
+    throw new Error('审批 Subject 模板不能为空');
+  }
+  if (!approvalBodyTemplate) {
+    throw new Error('审批 Body 模板不能为空');
+  }
 
   db.prepare(
     `UPDATE notification_settings
      SET smtp_host = ?, smtp_port = ?, smtp_username = ?, smtp_password = ?,
          use_ssl = ?, from_email = ?, from_name = ?,
-         subject_template = ?, body_template = ?, updated_at = ?
+         subject_template = ?, body_template = ?,
+         approval_subject_template = ?, approval_body_template = ?,
+         updated_at = ?
      WHERE id = 1`,
   ).run(
     smtpHost,
@@ -858,6 +952,8 @@ export function saveNotificationSettings(
     fromName,
     subjectTemplate,
     bodyTemplate,
+    approvalSubjectTemplate,
+    approvalBodyTemplate,
     nowText(),
   );
 
@@ -979,6 +1075,67 @@ export async function testNotificationSettings(payload: {
     subjectTemplate: '【{{app_name}}】邮件配置测试',
     bodyTemplate:
       '你好，\n\n这是 {{app_name}} 的邮件配置测试邮件。\n验证码样例：{{code}}，有效期 {{minutes}} 分钟。\n\n如果你收到此邮件，说明配置可用。',
+  });
+
+  return true;
+}
+
+export async function testApprovalNotificationSettings(payload: {
+  appName: string;
+  testEmail: string;
+}) {
+  const email = normalizeEmail(payload.testEmail);
+  if (!email || !isValidEmail(email)) {
+    throw new Error('测试邮箱格式不正确');
+  }
+
+  const settings = getNotificationSettings();
+  if (!settings.configured) {
+    throw new Error('邮箱配置未完成，请先保存基础SMTP配置');
+  }
+
+  const requestNo = `APRTEST${Date.now()}`;
+  const context = {
+    action_text: '已提交',
+    applicant_user: '测试用户',
+    app_name: payload.appName,
+    approve_timeout_hours: 24,
+    current_expire_time: '2026-03-01 12:00:00',
+    reason: '这是审批文案测试邮件',
+    request_no: requestNo,
+    room_name: '测试群',
+    room_wxid: 'test_room@chatroom',
+    submitted_at: nowText(),
+    target_expire_time: '2026-03-03 12:00:00',
+    type_label: '过期时间修改',
+  };
+
+  const subject = fillTemplate(settings.approvalSubjectTemplate, context);
+  const body = fillTemplate(settings.approvalBodyTemplate, context);
+
+  const require = createRequire(import.meta.url);
+  let nodemailer: any;
+  try {
+    nodemailer = require('nodemailer');
+  } catch {
+    throw new Error('邮件依赖缺失，请安装 nodemailer 后重试');
+  }
+
+  const transporter = nodemailer.createTransport({
+    auth: {
+      pass: settings.smtpPassword,
+      user: settings.smtpUsername,
+    },
+    host: settings.smtpHost,
+    port: settings.smtpPort,
+    secure: settings.useSSL,
+  });
+
+  await transporter.sendMail({
+    from: `${settings.fromName} <${settings.fromEmail}>`,
+    subject,
+    text: body,
+    to: email,
   });
 
   return true;
@@ -1135,6 +1292,58 @@ export function getUserMenus(username: string) {
     });
   }
 
+  const maixuUserChildren: any[] = [];
+  if (has('MX_USER_ROOM_VIEW')) {
+    maixuUserChildren.push({
+      component: '/maixu-user/group-list/index',
+      meta: { affixTab: false, title: '群列表' },
+      name: 'MaixuUserGroupList',
+      path: '/maixu-user/group-list',
+    });
+    maixuUserChildren.push({
+      component: '/maixu-user/order-record/index',
+      meta: { affixTab: false, title: '麦序记录' },
+      name: 'MaixuUserOrderRecord',
+      path: '/maixu-user/order-record',
+    });
+    maixuUserChildren.push({
+      component: '/maixu-user/keyword-stat/index',
+      meta: { affixTab: false, title: '关键字统计' },
+      name: 'MaixuUserKeywordStat',
+      path: '/maixu-user/keyword-stat',
+    });
+    maixuUserChildren.push({
+      component: '/maixu-user/top-card/index',
+      meta: { affixTab: false, title: '置顶卡设置' },
+      name: 'MaixuUserTopCard',
+      path: '/maixu-user/top-card',
+    });
+  }
+
+  const applyBusinessChildren: any[] = [];
+  if (has('MX_USER_ROOM_VIEW')) {
+    applyBusinessChildren.push({
+      component: '/apply-business/submit/index',
+      meta: { affixTab: false, title: '提交申请' },
+      name: 'ApplyBusinessSubmit',
+      path: '/apply-business/submit',
+    });
+    applyBusinessChildren.push({
+      component: '/apply-business/mine/index',
+      meta: { affixTab: false, title: '我的申请' },
+      name: 'ApplyBusinessMine',
+      path: '/apply-business/mine',
+    });
+  }
+  if (isSuper && has('MX_USER_ROOM_VIEW')) {
+    applyBusinessChildren.push({
+      component: '/apply-business/review/index',
+      meta: { affixTab: false, title: '我的审批' },
+      name: 'ApplyBusinessReview',
+      path: '/apply-business/review',
+    });
+  }
+
   const systemChildren: any[] = [];
   if (isSuper && has('MX_USER_VIEW')) {
     systemChildren.push({
@@ -1205,6 +1414,34 @@ export function getUserMenus(username: string) {
       path: '/maixu',
       redirect: maixuChildren[0]?.path || '/maixu/group-list',
       children: maixuChildren,
+    });
+  }
+
+  if (maixuUserChildren.length > 0) {
+    menus.push({
+      meta: {
+        icon: 'solar:users-group-two-rounded-bold-duotone',
+        order: 21,
+        title: '麦序机器人-用户',
+      },
+      name: 'MaixuUser',
+      path: '/maixu-user',
+      redirect: maixuUserChildren[0]?.path || '/maixu-user/group-list',
+      children: maixuUserChildren,
+    });
+  }
+
+  if (applyBusinessChildren.length > 0) {
+    menus.push({
+      meta: {
+        icon: 'solar:document-add-bold-duotone',
+        order: 22,
+        title: '申请业务',
+      },
+      name: 'ApplyBusiness',
+      path: '/apply-business',
+      redirect: applyBusinessChildren[0]?.path || '/apply-business/submit',
+      children: applyBusinessChildren,
     });
   }
 

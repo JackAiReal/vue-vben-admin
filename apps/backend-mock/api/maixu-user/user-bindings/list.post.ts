@@ -1,6 +1,7 @@
 import { eventHandler } from 'h3';
+
 import { verifyAccessToken } from '~/utils/jwt-utils';
-import { getNotificationSettings } from '~/utils/rbac-store';
+import { listMaixuUserBindings } from '~/utils/maixu-user-store';
 import { unAuthorizedResponse, useResponseSuccess } from '~/utils/response';
 
 export default eventHandler((event) => {
@@ -8,5 +9,6 @@ export default eventHandler((event) => {
   if (!user) {
     return unAuthorizedResponse(event);
   }
-  return useResponseSuccess(getNotificationSettings());
+
+  return useResponseSuccess(listMaixuUserBindings(user.username));
 });
