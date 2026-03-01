@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 export interface RbacPermission {
   category: string;
   code: string;
+  hidden?: boolean;
   label: string;
+  menuGroup?: string;
+  order?: number;
 }
 
 export interface RbacGroup {
@@ -55,43 +58,331 @@ export interface OperationLogItem {
   username: string;
 }
 
+export type SystemLogLevel = 'error' | 'info' | 'warn';
+
+export interface SystemLogItem {
+  createdAt: string;
+  detailJson: string;
+  id: number;
+  level: SystemLogLevel;
+  message: string;
+  source: string;
+  username: string;
+}
+
 const RBAC_PERMISSIONS: RbacPermission[] = [
-  { category: '概览', code: 'MX_DASHBOARD_VIEW', label: '查看概览' },
-  { category: '麦序群列表', code: 'MX_ROOM_VIEW', label: '查看群列表' },
-  { category: '麦序群列表', code: 'MX_ROOM_EDIT', label: '编辑群配置/状态' },
   {
-    category: '麦序机器人-用户',
-    code: 'MX_USER_ROOM_VIEW',
-    label: '查看用户群列表',
+    category: '左侧菜单',
+    code: 'MX_DASHBOARD_VIEW',
+    label: '概览 / 概览',
+    menuGroup: '概览',
+    order: 10,
   },
-  { category: '群成员', code: 'MX_MEMBER_VIEW', label: '查看群成员' },
-  { category: '群成员', code: 'MX_MEMBER_EDIT', label: '编辑群成员' },
-  { category: '麦序查询', code: 'MX_ORDER_VIEW', label: '查看麦序查询' },
-  { category: '麦序查询', code: 'MX_ORDER_EDIT', label: '编辑麦序记录' },
-  { category: '关键词统计', code: 'MX_KEYWORD_VIEW', label: '查看关键词统计' },
-  { category: '关键词统计', code: 'MX_KEYWORD_EDIT', label: '编辑关键词统计' },
-  { category: '置顶卡设置', code: 'MX_TOP_VIEW', label: '查看置顶卡设置' },
-  { category: '置顶卡设置', code: 'MX_TOP_EDIT', label: '编辑置顶卡设置' },
-  { category: '系统配置', code: 'MX_RBAC_VIEW', label: '查看权限分组管理' },
-  { category: '系统配置', code: 'MX_RBAC_EDIT', label: '编辑权限分组管理' },
-  { category: '系统配置', code: 'MX_USER_VIEW', label: '查看用户管理' },
-  { category: '系统配置', code: 'MX_USER_EDIT', label: '编辑用户管理' },
-  { category: '系统配置', code: 'MX_NOTIFY_VIEW', label: '查看通知设置' },
-  { category: '系统配置', code: 'MX_NOTIFY_EDIT', label: '编辑通知设置' },
-  { category: '系统配置', code: 'MX_OPLOG_VIEW', label: '查看操作日志' },
-  { category: '系统配置', code: 'MX_OPLOG_EDIT', label: '编辑操作日志' },
+
+  {
+    category: '左侧菜单',
+    code: 'MX_ROOM_VIEW',
+    label: '麦序机器人 / 群列表',
+    menuGroup: '麦序机器人',
+    order: 20,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_ORDER_VIEW',
+    label: '麦序机器人 / 麦序查询',
+    menuGroup: '麦序机器人',
+    order: 21,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_KEYWORD_VIEW',
+    label: '麦序机器人 / 关键字统计',
+    menuGroup: '麦序机器人',
+    order: 22,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_TOP_VIEW',
+    label: '麦序机器人 / 置顶卡设置',
+    menuGroup: '麦序机器人',
+    order: 23,
+  },
+
+  {
+    category: '左侧菜单',
+    code: 'MX_USER_GROUP_VIEW',
+    label: '麦序机器人-用户 / 群列表',
+    menuGroup: '麦序机器人-用户',
+    order: 30,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_USER_ORDER_VIEW',
+    label: '麦序机器人-用户 / 麦序记录',
+    menuGroup: '麦序机器人-用户',
+    order: 31,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_USER_KEYWORD_VIEW',
+    label: '麦序机器人-用户 / 关键字统计',
+    menuGroup: '麦序机器人-用户',
+    order: 32,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_USER_TOP_VIEW',
+    label: '麦序机器人-用户 / 置顶卡设置',
+    menuGroup: '麦序机器人-用户',
+    order: 33,
+  },
+
+  {
+    category: '左侧菜单',
+    code: 'MX_APPLY_SUBMIT_VIEW',
+    label: '申请业务 / 提交申请',
+    menuGroup: '申请业务',
+    order: 40,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_APPLY_MINE_VIEW',
+    label: '申请业务 / 我的申请',
+    menuGroup: '申请业务',
+    order: 41,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_APPLY_REVIEW_VIEW',
+    label: '申请业务 / 我的审批',
+    menuGroup: '申请业务',
+    order: 42,
+  },
+
+  {
+    category: '左侧菜单',
+    code: 'MX_USER_VIEW',
+    label: '系统配置 / 用户管理',
+    menuGroup: '系统配置',
+    order: 50,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_RBAC_VIEW',
+    label: '系统配置 / 权限分组管理',
+    menuGroup: '系统配置',
+    order: 51,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_NOTIFY_VIEW',
+    label: '系统配置 / 通知设置',
+    menuGroup: '系统配置',
+    order: 52,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_OPLOG_VIEW',
+    label: '系统配置 / 操作日志',
+    menuGroup: '系统配置',
+    order: 53,
+  },
+  {
+    category: '左侧菜单',
+    code: 'MX_SYSLOG_VIEW',
+    label: '系统配置 / 系统日志',
+    menuGroup: '系统配置',
+    order: 54,
+  },
+
+  {
+    category: '按钮权限',
+    code: 'MX_ROOM_EDIT',
+    label: '麦序机器人 / 群列表：编辑群配置与状态',
+    menuGroup: '麦序机器人',
+    order: 110,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_MEMBER_VIEW',
+    label: '麦序机器人 / 群列表：查看群成员',
+    menuGroup: '麦序机器人',
+    order: 111,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_MEMBER_EDIT',
+    label: '麦序机器人 / 群列表：编辑群成员',
+    menuGroup: '麦序机器人',
+    order: 112,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_ORDER_EDIT',
+    label: '麦序机器人 / 麦序查询：新增、修改、删除',
+    menuGroup: '麦序机器人',
+    order: 113,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_KEYWORD_EDIT',
+    label: '麦序机器人 / 关键字统计：新增、修改、删除',
+    menuGroup: '麦序机器人',
+    order: 114,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_TOP_EDIT',
+    label: '麦序机器人 / 置顶卡设置：新增、修改、删除',
+    menuGroup: '麦序机器人',
+    order: 115,
+  },
+
+  {
+    category: '按钮权限',
+    code: 'MX_USER_GROUP_EDIT',
+    label: '麦序机器人-用户 / 群列表：绑定、配置、暂停、删除',
+    menuGroup: '麦序机器人-用户',
+    order: 120,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_USER_ORDER_EDIT',
+    label: '麦序机器人-用户 / 麦序记录：新增、修改、删除',
+    menuGroup: '麦序机器人-用户',
+    order: 121,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_USER_KEYWORD_EDIT',
+    label: '麦序机器人-用户 / 关键字统计：新增、修改、删除',
+    menuGroup: '麦序机器人-用户',
+    order: 122,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_USER_TOP_EDIT',
+    label: '麦序机器人-用户 / 置顶卡设置：新增、修改、删除',
+    menuGroup: '麦序机器人-用户',
+    order: 123,
+  },
+
+  {
+    category: '按钮权限',
+    code: 'MX_APPLY_SUBMIT_EDIT',
+    label: '申请业务 / 提交申请：提交审批单',
+    menuGroup: '申请业务',
+    order: 130,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_APPLY_MINE_EDIT',
+    label: '申请业务 / 我的申请：修改重提、撤回',
+    menuGroup: '申请业务',
+    order: 131,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_APPLY_REVIEW_EDIT',
+    label: '申请业务 / 我的审批：同意、驳回',
+    menuGroup: '申请业务',
+    order: 132,
+  },
+
+  {
+    category: '按钮权限',
+    code: 'MX_RBAC_EDIT',
+    label: '系统配置 / 权限分组管理：增删改',
+    menuGroup: '系统配置',
+    order: 140,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_USER_EDIT',
+    label: '系统配置 / 用户管理：增删改、禁用恢复',
+    menuGroup: '系统配置',
+    order: 141,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_NOTIFY_EDIT',
+    label: '系统配置 / 通知设置：保存与测试邮件',
+    menuGroup: '系统配置',
+    order: 142,
+  },
+  {
+    category: '按钮权限',
+    code: 'MX_OPLOG_EDIT',
+    label: '系统配置 / 操作日志：增删改',
+    menuGroup: '系统配置',
+    order: 143,
+  },
+
+  {
+    category: '系统兼容',
+    code: 'MX_USER_ROOM_VIEW',
+    hidden: true,
+    label: '兼容旧版：麦序机器人-用户菜单查看',
+    menuGroup: '系统兼容',
+    order: 999,
+  },
 ];
+
+const LEGACY_VIEW_CODE_MAP: Record<string, string[]> = {
+  MX_USER_ROOM_VIEW: [
+    'MX_USER_GROUP_VIEW',
+    'MX_USER_ORDER_VIEW',
+    'MX_USER_KEYWORD_VIEW',
+    'MX_USER_TOP_VIEW',
+    'MX_APPLY_SUBMIT_VIEW',
+    'MX_APPLY_MINE_VIEW',
+    'MX_APPLY_REVIEW_VIEW',
+  ],
+};
+
+const LEGACY_EDIT_CODE_MAP: Record<string, string[]> = {
+  MX_KEYWORD_EDIT: ['MX_USER_KEYWORD_EDIT'],
+  MX_TOP_EDIT: ['MX_USER_TOP_EDIT'],
+};
+
+const IMPLIED_VIEW_CODE_MAP: Record<string, string[]> = {
+  MX_ROOM_EDIT: ['MX_ROOM_VIEW'],
+  MX_MEMBER_EDIT: ['MX_MEMBER_VIEW'],
+  MX_ORDER_EDIT: ['MX_ORDER_VIEW'],
+  MX_KEYWORD_EDIT: ['MX_KEYWORD_VIEW'],
+  MX_TOP_EDIT: ['MX_TOP_VIEW'],
+  MX_USER_GROUP_EDIT: ['MX_USER_GROUP_VIEW'],
+  MX_USER_ORDER_EDIT: ['MX_USER_ORDER_VIEW'],
+  MX_USER_KEYWORD_EDIT: ['MX_USER_KEYWORD_VIEW'],
+  MX_USER_TOP_EDIT: ['MX_USER_TOP_VIEW'],
+  MX_APPLY_SUBMIT_EDIT: ['MX_APPLY_SUBMIT_VIEW'],
+  MX_APPLY_MINE_EDIT: ['MX_APPLY_MINE_VIEW'],
+  MX_APPLY_REVIEW_EDIT: ['MX_APPLY_REVIEW_VIEW'],
+  MX_RBAC_EDIT: ['MX_RBAC_VIEW'],
+  MX_USER_EDIT: ['MX_USER_VIEW'],
+  MX_NOTIFY_EDIT: ['MX_NOTIFY_VIEW'],
+  MX_OPLOG_EDIT: ['MX_OPLOG_VIEW'],
+};
 
 const VIEW_ONLY_CODES = [
   'MX_DASHBOARD_VIEW',
   'MX_ROOM_VIEW',
-  'MX_USER_ROOM_VIEW',
-  'MX_MEMBER_VIEW',
   'MX_ORDER_VIEW',
   'MX_KEYWORD_VIEW',
   'MX_TOP_VIEW',
+  'MX_USER_GROUP_VIEW',
+  'MX_USER_ORDER_VIEW',
+  'MX_USER_KEYWORD_VIEW',
+  'MX_USER_TOP_VIEW',
+  'MX_APPLY_SUBMIT_VIEW',
+  'MX_APPLY_MINE_VIEW',
+  'MX_APPLY_REVIEW_VIEW',
+  'MX_USER_VIEW',
+  'MX_RBAC_VIEW',
   'MX_NOTIFY_VIEW',
   'MX_OPLOG_VIEW',
+  'MX_SYSLOG_VIEW',
+  'MX_MEMBER_VIEW',
 ];
 
 const EDITOR_CODES = [
@@ -101,6 +392,12 @@ const EDITOR_CODES = [
   'MX_ORDER_EDIT',
   'MX_KEYWORD_EDIT',
   'MX_TOP_EDIT',
+  'MX_USER_GROUP_EDIT',
+  'MX_USER_ORDER_EDIT',
+  'MX_USER_KEYWORD_EDIT',
+  'MX_USER_TOP_EDIT',
+  'MX_APPLY_SUBMIT_EDIT',
+  'MX_APPLY_MINE_EDIT',
   'MX_NOTIFY_EDIT',
 ];
 
@@ -176,6 +473,16 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT NOT NULL,
+  source TEXT NOT NULL,
+  message TEXT NOT NULL,
+  detail_json TEXT NOT NULL,
+  username TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS notification_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   smtp_host TEXT NOT NULL DEFAULT '',
@@ -227,6 +534,12 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_rbac_users_email ON rbac_users(email)');
 db.exec(
   'CREATE INDEX IF NOT EXISTS idx_email_codes_scene_email ON email_verification_codes(scene, email)',
 );
+db.exec(
+  'CREATE INDEX IF NOT EXISTS idx_system_logs_level_created ON system_logs(level, created_at)',
+);
+db.exec(
+  'CREATE INDEX IF NOT EXISTS idx_system_logs_source_created ON system_logs(source, created_at)',
+);
 
 function nowText() {
   const date = new Date();
@@ -239,13 +552,35 @@ function toSafePermissions(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
   }
-  return [
+
+  const baseCodes = [
     ...new Set(
       value
         .map((item) => String(item || '').trim())
         .filter((item) => item && valid.has(item)),
     ),
   ];
+
+  const merged = new Set(baseCodes);
+  for (const code of baseCodes) {
+    for (const mappedCode of LEGACY_VIEW_CODE_MAP[code] || []) {
+      if (valid.has(mappedCode)) {
+        merged.add(mappedCode);
+      }
+    }
+    for (const mappedCode of LEGACY_EDIT_CODE_MAP[code] || []) {
+      if (valid.has(mappedCode)) {
+        merged.add(mappedCode);
+      }
+    }
+    for (const mappedCode of IMPLIED_VIEW_CODE_MAP[code] || []) {
+      if (valid.has(mappedCode)) {
+        merged.add(mappedCode);
+      }
+    }
+  }
+
+  return [...merged];
 }
 
 function parsePermissions(value: string) {
@@ -443,7 +778,14 @@ function toSafeUser(row: any) {
 }
 
 export function getPermissionDefinitions() {
-  return RBAC_PERMISSIONS;
+  return RBAC_PERMISSIONS.filter((item) => !item.hidden).toSorted((a, b) => {
+    const left = Number(a.order || 0);
+    const right = Number(b.order || 0);
+    if (left !== right) {
+      return left - right;
+    }
+    return a.label.localeCompare(b.label, 'zh-CN');
+  });
 }
 
 export function listGroups(): RbacGroup[] {
@@ -1245,7 +1587,22 @@ export function getUserAccessCodes(username: string) {
   const group = db
     .prepare('SELECT permissions FROM rbac_groups WHERE id = ? LIMIT 1')
     .get(user.groupId);
-  return group ? parsePermissions(String(group.permissions || '[]')) : [];
+  const parsed = group ? parsePermissions(String(group.permissions || '[]')) : [];
+  const merged = new Set(parsed);
+
+  for (const code of parsed) {
+    for (const mappedCode of LEGACY_VIEW_CODE_MAP[code] || []) {
+      merged.add(mappedCode);
+    }
+    for (const mappedCode of LEGACY_EDIT_CODE_MAP[code] || []) {
+      merged.add(mappedCode);
+    }
+    for (const mappedCode of IMPLIED_VIEW_CODE_MAP[code] || []) {
+      merged.add(mappedCode);
+    }
+  }
+
+  return [...merged];
 }
 
 export function getUserMenus(username: string) {
@@ -1293,25 +1650,31 @@ export function getUserMenus(username: string) {
   }
 
   const maixuUserChildren: any[] = [];
-  if (has('MX_USER_ROOM_VIEW')) {
+  if (has('MX_USER_GROUP_VIEW')) {
     maixuUserChildren.push({
       component: '/maixu-user/group-list/index',
       meta: { affixTab: false, title: '群列表' },
       name: 'MaixuUserGroupList',
       path: '/maixu-user/group-list',
     });
+  }
+  if (has('MX_USER_ORDER_VIEW')) {
     maixuUserChildren.push({
       component: '/maixu-user/order-record/index',
       meta: { affixTab: false, title: '麦序记录' },
       name: 'MaixuUserOrderRecord',
       path: '/maixu-user/order-record',
     });
+  }
+  if (has('MX_USER_KEYWORD_VIEW')) {
     maixuUserChildren.push({
       component: '/maixu-user/keyword-stat/index',
       meta: { affixTab: false, title: '关键字统计' },
       name: 'MaixuUserKeywordStat',
       path: '/maixu-user/keyword-stat',
     });
+  }
+  if (has('MX_USER_TOP_VIEW')) {
     maixuUserChildren.push({
       component: '/maixu-user/top-card/index',
       meta: { affixTab: false, title: '置顶卡设置' },
@@ -1321,13 +1684,15 @@ export function getUserMenus(username: string) {
   }
 
   const applyBusinessChildren: any[] = [];
-  if (has('MX_USER_ROOM_VIEW')) {
+  if (has('MX_APPLY_SUBMIT_VIEW')) {
     applyBusinessChildren.push({
       component: '/apply-business/submit/index',
       meta: { affixTab: false, title: '提交申请' },
       name: 'ApplyBusinessSubmit',
       path: '/apply-business/submit',
     });
+  }
+  if (has('MX_APPLY_MINE_VIEW')) {
     applyBusinessChildren.push({
       component: '/apply-business/mine/index',
       meta: { affixTab: false, title: '我的申请' },
@@ -1335,7 +1700,7 @@ export function getUserMenus(username: string) {
       path: '/apply-business/mine',
     });
   }
-  if (isSuper && has('MX_USER_ROOM_VIEW')) {
+  if (isSuper && has('MX_APPLY_REVIEW_VIEW')) {
     applyBusinessChildren.push({
       component: '/apply-business/review/index',
       meta: { affixTab: false, title: '我的审批' },
@@ -1375,6 +1740,14 @@ export function getUserMenus(username: string) {
       meta: { affixTab: false, title: '操作日志' },
       name: 'SystemOperationLog',
       path: '/system-config/operation-log',
+    });
+  }
+  if (has('MX_SYSLOG_VIEW')) {
+    systemChildren.push({
+      component: '/system-config/system-log/index',
+      meta: { affixTab: false, title: '系统日志' },
+      name: 'SystemSystemLog',
+      path: '/system-config/system-log',
     });
   }
 
@@ -1479,6 +1852,14 @@ export function appendOperationLog(payload: {
     payload.detailJson,
     nowText(),
   );
+
+  appendSystemLog({
+    detailJson: payload.detailJson,
+    level: 'info',
+    message: `${payload.page} / ${payload.action}`,
+    source: 'operation-log',
+    username: payload.username,
+  });
 }
 
 export function listOperationLogs(query: {
@@ -1613,4 +1994,115 @@ export function deleteOperationLog(id: number) {
     throw new Error('日志不存在');
   }
   db.prepare('DELETE FROM operation_logs WHERE id = ?').run(id);
+}
+
+function normalizeSystemLogLevel(level: unknown): SystemLogLevel {
+  const value = String(level || '')
+    .trim()
+    .toLowerCase();
+  if (value === 'warn') {
+    return 'warn';
+  }
+  if (value === 'error') {
+    return 'error';
+  }
+  return 'info';
+}
+
+export function appendSystemLog(payload: {
+  detailJson?: string;
+  level?: SystemLogLevel;
+  message: string;
+  source: string;
+  username?: string;
+}) {
+  const level = normalizeSystemLogLevel(payload.level);
+  const source = String(payload.source || '').trim() || 'app';
+  const message = String(payload.message || '').trim() || '-';
+  const detailJson = String(payload.detailJson || '{}').trim() || '{}';
+  const username = String(payload.username || '').trim();
+
+  db.prepare(
+    'INSERT INTO system_logs (level, source, message, detail_json, username, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(level, source, message, detailJson, username, nowText());
+}
+
+export function listSystemLogs(query: {
+  end?: string;
+  keyword?: string;
+  level?: '' | 'error' | 'info' | 'warn';
+  page?: number;
+  pageSize?: number;
+  source?: string;
+  start?: string;
+  username?: string;
+}) {
+  const where: string[] = [];
+  const params: any[] = [];
+
+  const level = normalizeSystemLogLevel(query.level || '');
+  if (query.level && ['info', 'warn', 'error'].includes(String(query.level))) {
+    where.push('level = ?');
+    params.push(level);
+  }
+
+  if (query.source) {
+    where.push('source LIKE ?');
+    params.push(`%${query.source.trim()}%`);
+  }
+
+  if (query.username) {
+    where.push('username LIKE ?');
+    params.push(`%${query.username.trim()}%`);
+  }
+
+  if (query.start) {
+    where.push('created_at >= ?');
+    params.push(query.start);
+  }
+
+  if (query.end) {
+    where.push('created_at <= ?');
+    params.push(query.end);
+  }
+
+  if (query.keyword) {
+    where.push('(message LIKE ? OR detail_json LIKE ? OR source LIKE ?)');
+    const keyword = `%${query.keyword.trim()}%`;
+    params.push(keyword, keyword, keyword);
+  }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const total = Number(
+    db
+      .prepare(`SELECT COUNT(1) as count FROM system_logs ${whereClause}`)
+      .get(...params)?.count || 0,
+  );
+
+  const page = Math.max(1, Number(query.page || 1));
+  const pageSize = Math.max(1, Math.min(200, Number(query.pageSize || 20)));
+  const offset = (page - 1) * pageSize;
+
+  const rows = db
+    .prepare(
+      `SELECT id, level, source, message, detail_json, username, created_at
+       FROM system_logs
+       ${whereClause}
+       ORDER BY id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params, pageSize, offset);
+
+  const list: SystemLogItem[] = rows.map((row: any) => ({
+    createdAt: String(row.created_at || ''),
+    detailJson: String(row.detail_json || '{}'),
+    id: Number(row.id),
+    level: normalizeSystemLogLevel(row.level),
+    message: String(row.message || ''),
+    source: String(row.source || ''),
+    username: String(row.username || ''),
+  }));
+
+  return { list, page, pageSize, total };
 }

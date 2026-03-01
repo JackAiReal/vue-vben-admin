@@ -119,7 +119,7 @@ function hasCode(code: string) {
   return accessStore.accessCodes.includes(code);
 }
 
-const canEditKeyword = computed(() => hasCode('MX_KEYWORD_EDIT'));
+const canEditKeyword = computed(() => hasCode('MX_USER_KEYWORD_EDIT'));
 
 const formModalOpen = ref(false);
 const formSaving = ref(false);

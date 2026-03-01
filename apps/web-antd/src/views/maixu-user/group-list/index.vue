@@ -7,7 +7,7 @@ import type { MaixuRoomItem } from '#/api/maixu/room';
 import { computed, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
-import { useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
   Button,
@@ -38,6 +38,12 @@ import {
   updateMaixuRoomConfigRaw,
 } from '#/api/maixu/room';
 
+import {
+  COMMAND_DERIVED_KEY_LABELS,
+  COMMAND_TO_CONFIG_KEY,
+} from '../config-key-label-map';
+
+const accessStore = useAccessStore();
 const userStore = useUserStore();
 
 const loading = ref(false);
@@ -67,6 +73,7 @@ interface ConfigFieldItem {
 const configModalOpen = ref(false);
 const configSaving = ref(false);
 const configFields = ref<ConfigFieldItem[]>([]);
+const rawRoomConfig = ref<Record<string, any>>({});
 const selectedRoom = ref<MaixuRoomItem | null>(null);
 
 const memberModalOpen = ref(false);
@@ -180,11 +187,231 @@ function getRoomConfig(record: MaixuRoomItem) {
   return record.room_config ?? {};
 }
 
+const CONFIG_HIDDEN_KEYS = new Set([
+  'expireTime',
+  'expire_time',
+  'isAIReply',
+  'isChangeAnouncement',
+]);
+
+const CONFIG_SECTION_ORDER = [
+  'basic',
+  'koupai',
+  'top',
+  'stats',
+  'other',
+] as const;
+
+const CONFIG_SECTION_TITLES: Record<(typeof CONFIG_SECTION_ORDER)[number], string> = {
+  basic: '麦序基础配置',
+  koupai: '扣排器相关设置',
+  other: '其他配置',
+  stats: '统计与打卡配置',
+  top: '置顶卡相关配置',
+};
+
+const CONFIG_KEY_LABELS: Record<string, string> = {
+  HomePeopleOrderStr: '打卡模板',
+  adminWxids: '管理员WXID列表',
+  announcement: '公告内容',
+  bbLimitNum: 'BB限制次数',
+  bbTimeMin: 'BB计时分钟',
+  bb_timer_every_day: '每日BB定时',
+  bind_bot_name: '绑定机器人名称',
+  bind_bot_wxid: '绑定机器人WXID',
+  bind_vip_seller: '绑定VIP销售',
+  bind_vip_wxid: '绑定VIP账号WXID',
+  caculatePercent: '统计百分比',
+  cancelLimitValue: '取消阈值',
+  cancel_rank_stop_minutes: '取消排麦截止分钟',
+  card_max_num: '卡片上限数量',
+  chaduiStoptMinutes: '插队截止分钟',
+  clear_caculate_time: '清空统计时间',
+  detect_kou_time: '扣排检测时段',
+  emoj_info: '表情配置',
+  empty_clear_num: '空场清理阈值',
+  enter_top_expire_days: '进场置顶有效天数',
+  enter_top_name: '进场置顶名称',
+  enter_top_num: '进场置顶数量',
+  expireTime: '过期时间',
+  expire_time: '过期时间',
+  handTopNum: '手动置顶次数',
+  handTopValue: '手动置顶阈值',
+  homePeopleStr: '主持文案',
+  isAIReply: 'AI回复开关',
+  isAddWipe: '补位开关',
+  isAutoClearCaculate: '自动清理统计',
+  isBBMention: 'BB提醒@',
+  isCanCancel: '取排开关',
+  isCarryMaixu: '携带麦序',
+  isChangeAnouncement: '自动改公告',
+  isCutRank: '截排开关',
+  isDailyOrder: '每日麦序',
+  isDetechMachine: '机器检测',
+  isExitMention: '退场提醒@',
+  isHandTop: '手动置顶开关',
+  isHomePeopleOrderSend: '发送主持麦序播报',
+  isHourShowCaculate: '小时统计展示',
+  isLianPai: '连排开关',
+  isMustAdmin: '仅管理员操作',
+  isNewRankOutPut: '新版排榜输出',
+  isOnlyMention: '仅@模式',
+  isRegularOrder: '正则排麦',
+  isStart: '启停开关',
+  isSuperDetechMachine: '超级机器检测',
+  isTopCard: '置顶卡开关',
+  isVs: 'VS模式',
+  is_add_first_zero: '首位补零',
+  is_admin_black_record: '管理员黑名单记录',
+  is_admin_black_zuofei: '管理员黑名单作废',
+  is_always_show_rank: '始终展示排榜',
+  is_at_koupaiqi: '@扣排器',
+  is_auto_caculate: '自动统计',
+  is_auto_clear_bb: '自动清空BB',
+  is_auto_reply: '自动回复',
+  is_bb_no_back_auto_cancel: 'BB无回应自动取消',
+  is_caculate_order_cache: '统计缓存开关',
+  is_calculate_task: '统计任务开关',
+  is_card_task: '卡片任务开关',
+  is_dai_kou: '代扣开关',
+  is_easy_image_kou: '简易图片扣排',
+  is_emoj_caculate_machine: '表情统计机审',
+  is_emoj_kou: '表情扣排',
+  is_emoj_not_same_machine: '表情不一致机审',
+  is_emoj_number_machine: '表情数量机审',
+  is_emoj_send: '表情发送开关',
+  is_enter_send_card: '入场发卡',
+  is_fake_code_kou_pai: '假码扣排',
+  is_hour_click_in: '整点点入场',
+  is_image_kou: '图片扣排',
+  is_jiantou_number_machine: '箭头数量机审',
+  is_move_order: '移动排麦',
+  is_only_add_with_task: '仅任务可加排',
+  is_paiyipai_kou: '拍一拍扣排',
+  is_quote_kou: '引用扣排',
+  is_random_fang_machine: '随机房机审',
+  is_random_str_choose_chinese: '随机词中文',
+  is_random_str_choose_num: '随机词数字',
+  is_random_str_choose_str: '随机词字母',
+  is_reback_qu: '回退区开关',
+  is_record: '记录开关',
+  is_record_bb: '记录BB',
+  is_stop_send_daily_card: '停止发送日卡',
+  is_upload_rank: '上传排榜',
+  is_voice_kou: '语音扣排',
+  mai8StoptMinutes: '麦8截止分钟',
+  maxRank: '最大排麦人数',
+  mini_chadui_value: '最小插队值',
+  orderAddMinValue: '补排至少',
+  orderAddMinutes: '加排分钟',
+  orderStartMinutes: '开排分钟',
+  orderStopMinutes: '停排分钟',
+  orderTouMinutes: '偷排分钟',
+  order_header_str: '排麦头部文案',
+  overnight_time_range: '跨夜时间范围',
+  rankKeyWord: '排麦关键词',
+  regular_order_json: '正则排麦配置',
+  roomId: '群ID',
+  roomName: '群名称',
+  self_record_keys_commands: '自定义记录命令',
+  specialKeyJson: '特殊关键词映射',
+  specialKeyStr: '打架规则',
+  specialQA_str: '特殊问答文本',
+  specialQAs: '特殊问答列表',
+  special_vs_json: '单杀配置',
+  superAdmins: '超级管理员列表',
+  topNum: '置顶数量',
+  top_control: '置顶控制',
+  vs_max_num: 'VS最大人数',
+  vs_mini_value: '单杀至少',
+  vs_stop_time: 'VS截止时间',
+};
+
+function toConfigKey(key: string) {
+  return COMMAND_TO_CONFIG_KEY[key] || key;
+}
+
 function formatConfigLabel(key: string) {
-  return key
-    .replaceAll(/_/g, ' ')
-    .replaceAll(/([a-z])([A-Z])/g, '$1 $2')
-    .trim();
+  const mappedKey = toConfigKey(key);
+  const fromCommandMap = COMMAND_DERIVED_KEY_LABELS[mappedKey];
+  if (fromCommandMap) {
+    return fromCommandMap;
+  }
+
+  const fromLocalMap = CONFIG_KEY_LABELS[mappedKey];
+  if (fromLocalMap) {
+    return fromLocalMap;
+  }
+
+  return `${key} (待补充中文)`;
+}
+
+function isEditableConfigKey(key: string) {
+  const mappedKey = toConfigKey(key);
+  return !CONFIG_HIDDEN_KEYS.has(mappedKey) && !CONFIG_HIDDEN_KEYS.has(key);
+}
+
+function resolveConfigSection(key: string) {
+  const mappedKey = toConfigKey(key);
+
+  if (
+    mappedKey.includes('top') ||
+    mappedKey.includes('Top') ||
+    mappedKey.startsWith('vs_') ||
+    mappedKey === 'isTopCard' ||
+    mappedKey === 'isVs' ||
+    mappedKey === 'special_vs_json'
+  ) {
+    return 'top' as const;
+  }
+
+  if (
+    mappedKey.includes('kou') ||
+    mappedKey.includes('cancel') ||
+    mappedKey.includes('Detech') ||
+    mappedKey.includes('machine') ||
+    mappedKey.includes('quote') ||
+    mappedKey.includes('paiyipai') ||
+    mappedKey.includes('bb_') ||
+    mappedKey === 'isBBMention' ||
+    mappedKey === 'bbLimitNum' ||
+    mappedKey === 'bbTimeMin'
+  ) {
+    return 'koupai' as const;
+  }
+
+  if (
+    mappedKey.includes('caculate') ||
+    mappedKey.includes('calculate') ||
+    mappedKey.includes('record') ||
+    mappedKey.includes('card') ||
+    mappedKey.includes('daily') ||
+    mappedKey === 'HomePeopleOrderStr' ||
+    mappedKey === 'order_header_str'
+  ) {
+    return 'stats' as const;
+  }
+
+  if (
+    mappedKey.startsWith('order') ||
+    mappedKey.startsWith('rank') ||
+    mappedKey === 'isStart' ||
+    mappedKey === 'maxRank' ||
+    mappedKey === 'homePeopleStr' ||
+    mappedKey === 'specialKeyStr' ||
+    mappedKey === 'specialKeyJson' ||
+    mappedKey === 'specialQAs' ||
+    mappedKey === 'specialQA_str' ||
+    mappedKey === 'isRegularOrder' ||
+    mappedKey === 'isCutRank' ||
+    mappedKey === 'isLianPai' ||
+    mappedKey === 'isOnlyMention' ||
+    mappedKey === 'isCarryMaixu'
+  ) {
+    return 'basic' as const;
+  }
+
+  return 'other' as const;
 }
 
 function buildConfigField(key: string, value: unknown): ConfigFieldItem {
@@ -382,10 +609,56 @@ const configValidationMessage = computed(() => {
   return '';
 });
 
+const configFieldSections = computed(() => {
+  const sectionMap = new Map<string, ConfigFieldItem[]>();
+  for (const sectionKey of CONFIG_SECTION_ORDER) {
+    sectionMap.set(sectionKey, []);
+  }
+
+  for (const item of configFields.value) {
+    const section = resolveConfigSection(item.key);
+    const list = sectionMap.get(section) || [];
+    list.push(item);
+    sectionMap.set(section, list);
+  }
+
+  return CONFIG_SECTION_ORDER.map((sectionKey) => {
+    const items = (sectionMap.get(sectionKey) || []).toSorted((a, b) =>
+      formatConfigLabel(a.key).localeCompare(formatConfigLabel(b.key), 'zh-CN'),
+    );
+    return {
+      items,
+      key: sectionKey,
+      title: CONFIG_SECTION_TITLES[sectionKey],
+    };
+  }).filter((section) => section.items.length > 0);
+});
+
+const unmappedConfigKeys = computed(() => {
+  const set = new Set<string>();
+  for (const item of configFields.value) {
+    const mappedKey = toConfigKey(item.key);
+    if (!COMMAND_DERIVED_KEY_LABELS[mappedKey] && !CONFIG_KEY_LABELS[mappedKey]) {
+      set.add(item.key);
+    }
+  }
+  return [...set];
+});
+
 const currentUsername = computed(() => {
   const account = userStore.userInfo?.username || userStore.userInfo?.email || '';
   return String(account).trim();
 });
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditUserGroup = computed(() => hasCode('MX_USER_GROUP_EDIT'));
 
 async function loadRooms() {
   const username = currentUsername.value;
@@ -448,6 +721,11 @@ async function loadRooms() {
 }
 
 async function bindRoomByCode() {
+  if (!canEditUserGroup.value) {
+    message.warning('当前账号无群列表编辑权限');
+    return;
+  }
+
   const username = currentUsername.value;
   if (!username) {
     message.warning('未获取到当前账号，请重新登录后重试');
@@ -481,46 +759,49 @@ async function bindRoomByCode() {
 }
 
 function openConfigModal(record: MaixuRoomItem) {
+  if (!canEditUserGroup.value) {
+    message.warning('当前账号无群列表编辑权限');
+    return;
+  }
+
   selectedRoom.value = record;
-  configFields.value = Object.entries(getRoomConfig(record)).map(([key, value]) =>
-    buildConfigField(key, value),
-  );
+  rawRoomConfig.value = { ...getRoomConfig(record) };
+  configFields.value = Object.entries(rawRoomConfig.value)
+    .filter(([key]) => isEditableConfigKey(key))
+    .map(([key, value]) => buildConfigField(key, value));
   configModalOpen.value = true;
 }
 
-function buildConfigRawJson() {
-  const pieces: string[] = [];
-
-  for (const item of configFields.value) {
-    const keyPart = JSON.stringify(item.key);
-    let valuePart = 'null';
-
-    if (item.type === 'boolean') {
-      valuePart = item.boolValue ? 'true' : 'false';
-    } else if (item.type === 'int') {
-      valuePart = String(Number.parseInt(item.textValue.trim(), 10));
-    } else if (item.type === 'float') {
-      valuePart = item.textValue.trim();
-    } else if (item.type === 'json') {
-      valuePart = item.textValue.trim();
-    } else {
-      valuePart = JSON.stringify(item.textValue);
-    }
-
-    pieces.push(`${keyPart}:${valuePart}`);
+function parseConfigFieldValue(item: ConfigFieldItem) {
+  if (item.type === 'boolean') {
+    return item.boolValue;
   }
-
-  return `{${pieces.join(',')}}`;
+  if (item.type === 'int') {
+    return Number.parseInt(item.textValue.trim(), 10);
+  }
+  if (item.type === 'float') {
+    return Number.parseFloat(item.textValue.trim());
+  }
+  if (item.type === 'json') {
+    return JSON.parse(item.textValue.trim());
+  }
+  return item.textValue;
 }
 
-function buildConfigPayloadFromRaw(rawJson: string) {
-  const parsed = JSON.parse(rawJson);
-  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-    ? (parsed as Record<string, any>)
-    : {};
+function buildConfigPayload() {
+  const payload: Record<string, any> = { ...rawRoomConfig.value };
+  for (const item of configFields.value) {
+    payload[item.key] = parseConfigFieldValue(item);
+  }
+  return payload;
 }
 
 async function saveConfig() {
+  if (!canEditUserGroup.value) {
+    message.warning('当前账号无群列表编辑权限');
+    return;
+  }
+
   if (!selectedRoom.value) {
     return;
   }
@@ -529,8 +810,8 @@ async function saveConfig() {
     return;
   }
 
-  const configRawJson = buildConfigRawJson();
-  const payload = buildConfigPayloadFromRaw(configRawJson);
+  const payload = buildConfigPayload();
+  const configRawJson = JSON.stringify(payload);
   configSaving.value = true;
   try {
     const updated = await updateMaixuRoomConfigRaw({
@@ -563,6 +844,11 @@ async function saveConfig() {
 }
 
 async function setRoomRunning(record: MaixuRoomItem, running: boolean) {
+  if (!canEditUserGroup.value) {
+    message.warning('当前账号无群列表编辑权限');
+    return;
+  }
+
   try {
     const updated = await updateMaixuRoomConfigItem(
       record.room_wxid,
@@ -601,6 +887,11 @@ async function setRoomRunning(record: MaixuRoomItem, running: boolean) {
 }
 
 async function removeRoom(record: MaixuRoomItem) {
+  if (!canEditUserGroup.value) {
+    message.warning('当前账号无群列表编辑权限');
+    return;
+  }
+
   const username = currentUsername.value;
   if (!username) {
     message.warning('未获取到当前账号，请重新登录后重试');
@@ -710,7 +1001,12 @@ loadRooms();
           style="width: 320px"
           @press-enter="bindRoomByCode"
         />
-        <Button :loading="bindLoading" type="primary" @click="bindRoomByCode">
+        <Button
+          :disabled="!canEditUserGroup"
+          :loading="bindLoading"
+          type="primary"
+          @click="bindRoomByCode"
+        >
           绑定
         </Button>
         <Input
@@ -751,7 +1047,9 @@ loadRooms();
                     @click="({ key }) => handleConfigAction(String(key), asRoom(record))"
                   >
                     <Menu.Item key="members">群成员</Menu.Item>
-                    <Menu.Item key="config-all">全部配置</Menu.Item>
+                    <Menu.Item key="config-all" :disabled="!canEditUserGroup">
+                      全部配置
+                    </Menu.Item>
                   </Menu>
                 </template>
               </Dropdown>
@@ -759,6 +1057,7 @@ loadRooms();
               <Button
                 v-if="isRoomStarted(asRoom(record))"
                 type="link"
+                :disabled="!canEditUserGroup"
                 @click="setRoomRunning(asRoom(record), false)"
               >
                 暂停
@@ -766,6 +1065,7 @@ loadRooms();
               <Button
                 v-else
                 type="link"
+                :disabled="!canEditUserGroup"
                 @click="setRoomRunning(asRoom(record), true)"
               >
                 恢复
@@ -775,7 +1075,7 @@ loadRooms();
                 title="确认删除该群吗？删除后会解除当前账号的绑定关系。"
                 @confirm="removeRoom(asRoom(record))"
               >
-                <Button danger type="link">删除</Button>
+                <Button danger type="link" :disabled="!canEditUserGroup">删除</Button>
               </Popconfirm>
             </Space>
           </template>
@@ -786,9 +1086,10 @@ loadRooms();
     <Modal
       v-model:open="configModalOpen"
       :confirm-loading="configSaving"
-      :ok-button-props="{ disabled: !!configValidationMessage }"
+      :ok-button-props="{ disabled: !!configValidationMessage || !canEditUserGroup }"
       title="全部配置"
       width="860px"
+      wrap-class-name="maixu-user-config-modal"
       @ok="saveConfig"
     >
       <p
@@ -798,57 +1099,76 @@ loadRooms();
       >
         {{ configValidationMessage }}
       </p>
+      <p
+        v-if="unmappedConfigKeys.length > 0"
+        class="mb-2 text-xs"
+        style="color: var(--ant-color-warning)"
+      >
+        未匹配中文字段：{{ unmappedConfigKeys.join('、') }}
+      </p>
       <div v-if="configFields.length === 0" class="opacity-70">暂无可配置项</div>
-      <div v-else class="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+      <div v-else class="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
         <div
-          v-for="item in configFields"
-          :key="item.key"
-          :class="[
-            'py-1',
-            item.type === 'textarea' || item.type === 'json'
-              ? 'space-y-2'
-              : 'flex items-center gap-3',
-          ]"
+          v-for="section in configFieldSections"
+          :key="section.key"
+          class="config-section rounded-md p-3"
         >
-          <div class="min-w-[180px] text-sm font-medium">
-            {{ formatConfigLabel(item.key) }}
+          <div class="config-section-title mb-3 text-sm font-semibold">
+            {{ section.title }}
           </div>
 
-          <div class="flex-1">
-            <Switch
-              v-if="item.type === 'boolean'"
-              v-model:checked="item.boolValue"
-              checked-children="开"
-              un-checked-children="关"
-            />
-
-            <Input
-              v-else-if="item.type === 'string' || item.type === 'int' || item.type === 'float'"
-              v-model:value="item.textValue"
-              :placeholder="
-                item.type === 'int'
-                  ? '请输入整数'
-                  : item.type === 'float'
-                    ? '请输入小数'
-                    : '请输入内容'
-              "
-              :status="getConfigFieldError(item) ? 'error' : ''"
-            />
-
-            <Input.TextArea
-              v-else
-              v-model:value="item.textValue"
-              :auto-size="{ minRows: item.type === 'textarea' ? 2 : 4, maxRows: 10 }"
-              :placeholder="item.type === 'json' ? '请输入合法 JSON' : '请输入内容'"
-              :status="getConfigFieldError(item) ? 'error' : ''"
-            />
-
+          <div class="space-y-3">
             <div
-              v-if="getConfigFieldError(item)"
-              class="mt-1 text-xs"
-              style="color: var(--ant-color-error)"
+              v-for="item in section.items"
+              :key="item.key"
+              :class="[
+                'py-1',
+                item.type === 'textarea' || item.type === 'json'
+                  ? 'space-y-2'
+                  : 'flex items-center gap-3',
+              ]"
             >
-              {{ getConfigFieldError(item) }}
+              <div class="config-item-label min-w-[220px] text-sm font-medium">
+                {{ formatConfigLabel(item.key) }}
+              </div>
+
+              <div class="flex-1">
+                <Switch
+                  v-if="item.type === 'boolean'"
+                  v-model:checked="item.boolValue"
+                  checked-children="开"
+                  un-checked-children="关"
+                />
+
+                <Input
+                  v-else-if="item.type === 'string' || item.type === 'int' || item.type === 'float'"
+                  v-model:value="item.textValue"
+                  :placeholder="
+                    item.type === 'int'
+                      ? '请输入整数'
+                      : item.type === 'float'
+                        ? '请输入小数'
+                        : '请输入内容'
+                  "
+                  :status="getConfigFieldError(item) ? 'error' : ''"
+                />
+
+                <Input.TextArea
+                  v-else
+                  v-model:value="item.textValue"
+                  :auto-size="{ minRows: item.type === 'textarea' ? 2 : 4, maxRows: 10 }"
+                  :placeholder="item.type === 'json' ? '请输入合法 JSON' : '请输入内容'"
+                  :status="getConfigFieldError(item) ? 'error' : ''"
+                />
+
+                <div
+                  v-if="getConfigFieldError(item)"
+                  class="mt-1 text-xs"
+                  style="color: var(--ant-color-error)"
+                >
+                  {{ getConfigFieldError(item) }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -886,3 +1206,59 @@ loadRooms();
     </Modal>
   </Page>
 </template>
+
+<style>
+.maixu-user-config-modal .ant-modal-content,
+.maixu-user-config-modal .ant-modal-header,
+.maixu-user-config-modal .ant-modal-body,
+.maixu-user-config-modal .ant-modal-footer {
+  background: #1f232c;
+  color: #e5e7eb;
+}
+
+.maixu-user-config-modal .ant-modal-header {
+  border-bottom: 1px solid #343b4a;
+}
+
+.maixu-user-config-modal .ant-modal-footer {
+  border-top: 1px solid #343b4a;
+}
+
+.maixu-user-config-modal .ant-modal-title,
+.maixu-user-config-modal .ant-modal-close-x {
+  color: #f3f4f6;
+}
+
+.maixu-user-config-modal .config-section {
+  margin-bottom: 10px;
+  background: #262d39;
+  border: 1px solid #3a4456;
+}
+
+.maixu-user-config-modal .config-section-title {
+  color: #f3f4f6;
+}
+
+.maixu-user-config-modal .config-item-label {
+  color: #d1d5db;
+}
+
+.maixu-user-config-modal .ant-input,
+.maixu-user-config-modal .ant-input-affix-wrapper,
+.maixu-user-config-modal .ant-input-outlined,
+.maixu-user-config-modal .ant-input-textarea-affix-wrapper,
+.maixu-user-config-modal .ant-input-textarea {
+  color: #f9fafb;
+  background: #171b26;
+  border-color: #30384a;
+}
+
+.maixu-user-config-modal .ant-input::placeholder,
+.maixu-user-config-modal .ant-input-textarea textarea::placeholder {
+  color: #8b95a7;
+}
+
+.maixu-user-config-modal .ant-switch {
+  background: #576173;
+}
+</style>

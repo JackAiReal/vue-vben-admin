@@ -5,7 +5,7 @@ import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue';
 import { computed, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
-import { useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
   Button,
@@ -31,6 +31,7 @@ import { appendOperationLog } from '#/api/maixu/operation-log';
 
 const { RangePicker } = DatePicker;
 
+const accessStore = useAccessStore();
 const userStore = useUserStore();
 
 const loading = ref(false);
@@ -87,6 +88,18 @@ const isSuper = computed(() => {
   return roles.includes('super');
 });
 
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canReviewApply = computed(
+  () => isSuper.value && hasCode('MX_APPLY_REVIEW_EDIT'),
+);
+
 const detailOpen = ref(false);
 const detailRecord = ref<ExpireApprovalRecord | null>(null);
 
@@ -136,7 +149,7 @@ function toDateText(value?: Dayjs | null) {
 }
 
 async function loadData(page = paginationCurrent.value, pageSize = paginationPageSize.value) {
-  if (!isSuper.value) {
+  if (!canReviewApply.value) {
     rows.value = [];
     total.value = 0;
     return;
@@ -192,7 +205,8 @@ async function openDetail(record: ExpireApprovalRecord) {
 }
 
 async function doApprove(record: ExpireApprovalRecord) {
-  if (!isSuper.value) {
+  if (!canReviewApply.value) {
+    message.warning('当前账号无审批操作权限');
     return;
   }
   if (record.approval_status !== 'pending') {
@@ -219,6 +233,11 @@ async function doApprove(record: ExpireApprovalRecord) {
 }
 
 function openReject(record: ExpireApprovalRecord) {
+  if (!canReviewApply.value) {
+    message.warning('当前账号无审批操作权限');
+    return;
+  }
+
   if (record.approval_status !== 'pending') {
     message.warning('当前状态不可驳回');
     return;
@@ -230,6 +249,11 @@ function openReject(record: ExpireApprovalRecord) {
 }
 
 async function submitReject() {
+  if (!canReviewApply.value) {
+    message.warning('当前账号无审批操作权限');
+    return;
+  }
+
   const operatorUser = currentUsername.value;
   if (!operatorUser) {
     return;
@@ -268,8 +292,8 @@ loadData(1, paginationPageSize.value);
 
 <template>
   <Page title="申请业务 / 我的审批" description="超级管理员审批中心，可同意或驳回过期时间修改申请。">
-    <Card v-if="!isSuper">
-      <div class="text-sm">当前账号不是超级管理员，暂无审批权限。</div>
+    <Card v-if="!canReviewApply">
+      <div class="text-sm">当前账号暂无审批操作权限。</div>
     </Card>
 
     <template v-else>

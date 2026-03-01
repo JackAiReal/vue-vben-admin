@@ -115,7 +115,7 @@ function hasCode(code: string) {
   return accessStore.accessCodes.includes(code);
 }
 
-const canEditTop = computed(() => hasCode('MX_TOP_EDIT'));
+const canEditTop = computed(() => hasCode('MX_USER_TOP_EDIT'));
 
 const formModalOpen = ref(false);
 const formSaving = ref(false);

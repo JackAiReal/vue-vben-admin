@@ -2,10 +2,10 @@
 import type { Dayjs } from 'dayjs';
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
-import { useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import dayjs from 'dayjs';
 import {
@@ -22,6 +22,7 @@ import {
   message,
 } from 'ant-design-vue';
 
+import { getAccessCodesApi } from '#/api';
 import {
   cancelMyApproval,
   fetchApprovalRoomExpireInfo,
@@ -39,6 +40,7 @@ import {
 
 const { RangePicker } = DatePicker;
 
+const accessStore = useAccessStore();
 const userStore = useUserStore();
 
 const loading = ref(false);
@@ -101,6 +103,16 @@ const currentUserRole = computed(() => {
   return 'user';
 });
 
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditMyApply = computed(() => hasCode('MX_APPLY_MINE_EDIT'));
+
 const superAdminEmails = ref<string[]>([]);
 const notifySettings = ref<NotifySettings | null>(null);
 
@@ -118,7 +130,14 @@ const editState = reactive({
   targetExpireTime: undefined as Dayjs | undefined,
 });
 
-
+async function syncAccessCodes() {
+  try {
+    const latestCodes = await getAccessCodesApi();
+    accessStore.setAccessCodes(latestCodes);
+  } catch {
+    // ignore sync failure
+  }
+}
 
 async function loadNotifySettings() {
   try {
@@ -226,6 +245,11 @@ async function openDetail(record: ExpireApprovalRecord) {
 }
 
 async function openEdit(record: ExpireApprovalRecord) {
+  if (!canEditMyApply.value) {
+    message.warning('当前账号无申请编辑权限');
+    return;
+  }
+
   if (!['pending', 'rejected', 'cancelled'].includes(record.approval_status)) {
     message.warning('当前状态不支持重新提交');
     return;
@@ -252,6 +276,11 @@ async function openEdit(record: ExpireApprovalRecord) {
 }
 
 async function submitEdit() {
+  if (!canEditMyApply.value) {
+    message.warning('当前账号无申请编辑权限');
+    return;
+  }
+
   const username = currentUsername.value;
   if (!username) {
     return;
@@ -303,8 +332,8 @@ async function submitEdit() {
     editOpen.value = false;
     message.success('重新提交成功');
     await loadSuperAdminEmails();
-loadNotifySettings();
-loadData(1, paginationPageSize.value);
+    await loadNotifySettings();
+    await loadData(1, paginationPageSize.value);
   } catch (error) {
     message.error(error instanceof Error ? error.message : '重新提交失败');
   } finally {
@@ -313,6 +342,11 @@ loadData(1, paginationPageSize.value);
 }
 
 async function cancelOne(record: ExpireApprovalRecord) {
+  if (!canEditMyApply.value) {
+    message.warning('当前账号无申请编辑权限');
+    return;
+  }
+
   const username = currentUsername.value;
   if (!username) {
     return;
@@ -333,9 +367,12 @@ async function cancelOne(record: ExpireApprovalRecord) {
   }
 }
 
-loadSuperAdminEmails();
-loadNotifySettings();
-loadData(1, paginationPageSize.value);
+onMounted(async () => {
+  await syncAccessCodes();
+  await loadSuperAdminEmails();
+  await loadNotifySettings();
+  await loadData(1, paginationPageSize.value);
+});
 </script>
 
 <template>
@@ -375,7 +412,7 @@ loadData(1, paginationPageSize.value);
               <Button
                 size="small"
                 type="link"
-                :disabled="!['pending', 'rejected', 'cancelled'].includes(asRow(record).approval_status)"
+                :disabled="!canEditMyApply || !['pending', 'rejected', 'cancelled'].includes(asRow(record).approval_status)"
                 @click="openEdit(asRow(record))"
               >
                 修改重提
@@ -388,7 +425,7 @@ loadData(1, paginationPageSize.value);
                   size="small"
                   danger
                   type="link"
-                  :disabled="asRow(record).approval_status !== 'pending'"
+                  :disabled="!canEditMyApply || asRow(record).approval_status !== 'pending'"
                 >
                   撤回
                 </Button>
@@ -417,6 +454,7 @@ loadData(1, paginationPageSize.value);
     <Modal
       v-model:open="editOpen"
       :confirm-loading="editSaving"
+      :ok-button-props="{ disabled: !canEditMyApply }"
       title="修改并重新提交"
       width="760px"
       @ok="submitEdit"

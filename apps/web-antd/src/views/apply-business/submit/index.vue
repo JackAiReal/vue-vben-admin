@@ -1,10 +1,10 @@
 <script lang="ts" setup>
 import type { Dayjs } from 'dayjs';
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
-import { useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
   AutoComplete,
@@ -18,6 +18,7 @@ import {
   message,
 } from 'ant-design-vue';
 
+import { getAccessCodesApi } from '#/api';
 import {
   createExpireApproval,
   fetchApprovalRoomExpireInfo,
@@ -34,6 +35,7 @@ import {
   type UserRoomBindingItem,
 } from '#/api/maixu/user-room';
 
+const accessStore = useAccessStore();
 const userStore = useUserStore();
 
 const loadingBindings = ref(false);
@@ -71,6 +73,16 @@ const currentUserRole = computed(() => {
   }
   return 'user';
 });
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canSubmitApply = computed(() => hasCode('MX_APPLY_SUBMIT_EDIT'));
 
 const roomOptions = computed(() =>
   boundRooms.value.map((item) => ({
@@ -121,6 +133,15 @@ function dedupeBindings(items: UserRoomBindingItem[]) {
   return [...roomMap.values()];
 }
 
+async function syncAccessCodes() {
+  try {
+    const latestCodes = await getAccessCodesApi();
+    accessStore.setAccessCodes(latestCodes);
+  } catch {
+    // ignore sync failure
+  }
+}
+
 async function loadBoundRooms() {
   const username = currentUsername.value;
   if (!username) {
@@ -142,6 +163,11 @@ async function loadBoundRooms() {
 }
 
 function openExpireApplyModal() {
+  if (!canSubmitApply.value) {
+    message.warning('当前账号无提交申请权限');
+    return;
+  }
+
   modalOpen.value = true;
   roomInfo.value = null;
   formState.reason = '';
@@ -182,6 +208,11 @@ async function queryRoomInfo() {
 }
 
 async function submitApply() {
+  if (!canSubmitApply.value) {
+    message.warning('当前账号无提交申请权限');
+    return;
+  }
+
   const username = currentUsername.value;
   if (!username) {
     message.warning('未获取到当前账号，请重新登录后重试');
@@ -243,9 +274,12 @@ async function submitApply() {
   }
 }
 
-loadBoundRooms();
-loadSuperAdminEmails();
-loadNotifySettings();
+onMounted(async () => {
+  await syncAccessCodes();
+  await loadBoundRooms();
+  await loadSuperAdminEmails();
+  await loadNotifySettings();
+});
 </script>
 
 <template>
@@ -257,7 +291,9 @@ loadNotifySettings();
         </div>
 
         <div>
-          <Button type="primary" @click="openExpireApplyModal">申请修改过期时间</Button>
+          <Button type="primary" :disabled="!canSubmitApply" @click="openExpireApplyModal">
+            申请修改过期时间
+          </Button>
         </div>
       </Space>
     </Card>
@@ -265,6 +301,7 @@ loadNotifySettings();
     <Modal
       v-model:open="modalOpen"
       :confirm-loading="saving"
+      :ok-button-props="{ disabled: !canSubmitApply }"
       title="申请修改过期时间"
       width="760px"
       @ok="submitApply"

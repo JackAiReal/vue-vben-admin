@@ -5,6 +5,7 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 import { startProgress, stopProgress } from '@vben/utils';
 
+import { getAccessCodesApi } from '#/api';
 import { accessRoutes, coreRouteNames } from '#/router/routes';
 import { useAuthStore } from '#/store';
 
@@ -45,6 +46,15 @@ function setupCommonGuard(router: Router) {
  * @param router
  */
 function setupAccessGuard(router: Router) {
+  const isSameCodes = (left: string[], right: string[]) => {
+    if (left.length !== right.length) {
+      return false;
+    }
+    const a = [...left].sort();
+    const b = [...right].sort();
+    return a.every((item, index) => item === b[index]);
+  };
+
   router.beforeEach(async (to, from) => {
     const accessStore = useAccessStore();
     const userStore = useUserStore();
@@ -87,7 +97,17 @@ function setupAccessGuard(router: Router) {
 
     // 是否已经生成过动态路由
     if (accessStore.isAccessChecked) {
-      return true;
+      try {
+        const latestCodes = await getAccessCodesApi();
+        if (!isSameCodes(accessStore.accessCodes, latestCodes)) {
+          accessStore.setAccessCodes(latestCodes);
+          accessStore.setIsAccessChecked(false);
+        } else {
+          return true;
+        }
+      } catch {
+        return true;
+      }
     }
 
     // 生成路由表

@@ -107,14 +107,59 @@ const userColumns: TableColumnsType<RbacUser> = [
   { title: '操作', key: 'actions', width: 140, fixed: 'right' },
 ];
 
-const groupedPermissionDefs = computed(() => {
-  const map = new Map<string, PermissionDef[]>();
+const permissionSections = computed(() => {
+  const categoryOrder: Record<string, number> = {
+    左侧菜单: 10,
+    按钮权限: 20,
+    其他权限: 99,
+  };
+
+  const categoryMap = new Map<string, Map<string, PermissionDef[]>>();
+
   for (const item of permissionDefs.value) {
-    const list = map.get(item.category) || [];
+    const category = item.category || '其他权限';
+    const menuGroup = item.menuGroup || '未分类';
+
+    const groupMap = categoryMap.get(category) || new Map<string, PermissionDef[]>();
+    const list = groupMap.get(menuGroup) || [];
     list.push(item);
-    map.set(item.category, list);
+    groupMap.set(menuGroup, list);
+    categoryMap.set(category, groupMap);
   }
-  return [...map.entries()];
+
+  return [...categoryMap.entries()]
+    .sort((left, right) => {
+      const leftOrder = categoryOrder[left[0]] ?? 100;
+      const rightOrder = categoryOrder[right[0]] ?? 100;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left[0].localeCompare(right[0], 'zh-CN');
+    })
+    .map(([category, groupMap]) => {
+      const groups = [...groupMap.entries()]
+        .map(([name, items]) => ({
+          items: [...items].toSorted((a, b) => {
+            const leftOrder = Number(a.order || 0);
+            const rightOrder = Number(b.order || 0);
+            if (leftOrder !== rightOrder) {
+              return leftOrder - rightOrder;
+            }
+            return a.label.localeCompare(b.label, 'zh-CN');
+          }),
+          name,
+        }))
+        .toSorted((a, b) => {
+          const leftOrder = Number(a.items[0]?.order || 0);
+          const rightOrder = Number(b.items[0]?.order || 0);
+          if (leftOrder !== rightOrder) {
+            return leftOrder - rightOrder;
+          }
+          return a.name.localeCompare(b.name, 'zh-CN');
+        });
+
+      return { category, groups };
+    });
 });
 
 const groupOptions = computed(() =>
@@ -419,7 +464,8 @@ loadData();
       v-model:open="groupModalOpen"
       :confirm-loading="savingGroup"
       :title="editingGroup ? '修改权限组' : '新增权限组'"
-      width="760px"
+      width="980px"
+      wrap-class-name="rbac-group-modal"
       @ok="submitGroup"
     >
       <div class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -428,15 +474,31 @@ loadData();
       </div>
       <Checkbox.Group v-model:value="groupForm.permissions">
         <div
-          v-for="[category, perms] in groupedPermissionDefs"
-          :key="category"
-          class="mb-3"
+          v-for="section in permissionSections"
+          :key="section.category"
+          class="permission-panel mb-4 rounded-md p-3"
         >
-          <div class="mb-1 font-medium">{{ category }}</div>
-          <div class="grid grid-cols-1 gap-1 md:grid-cols-2">
-            <Checkbox v-for="perm in perms" :key="perm.code" :value="perm.code">
-              {{ perm.label }}
-            </Checkbox>
+          <div class="mb-3 text-sm font-semibold">{{ section.category }}</div>
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div
+              v-for="group in section.groups"
+              :key="`${section.category}-${group.name}`"
+              class="permission-group rounded-md p-2"
+            >
+              <div class="permission-group-title mb-2 text-xs font-medium">
+                {{ group.name }}
+              </div>
+              <div class="grid grid-cols-1 gap-1">
+                <Checkbox
+                  v-for="perm in group.items"
+                  :key="perm.code"
+                  :value="perm.code"
+                  class="permission-checkbox"
+                >
+                  {{ perm.label }}
+                </Checkbox>
+              </div>
+            </div>
           </div>
         </div>
       </Checkbox.Group>
@@ -478,3 +540,62 @@ loadData();
     </Modal>
   </Page>
 </template>
+
+<style>
+.rbac-group-modal .ant-modal-content,
+.rbac-group-modal .ant-modal-header,
+.rbac-group-modal .ant-modal-body {
+  background: #1f232c;
+  color: #e5e7eb;
+}
+
+.rbac-group-modal .ant-modal-title,
+.rbac-group-modal .ant-modal-close-x {
+  color: #f3f4f6;
+}
+
+.rbac-group-modal .ant-modal-header {
+  border-bottom: 1px solid #303744;
+}
+
+.rbac-group-modal .permission-panel {
+  background: #232936;
+  border: 1px solid #3a4455;
+}
+
+.rbac-group-modal .permission-group {
+  background: #1b2330;
+  border: 1px solid #324155;
+}
+
+.rbac-group-modal .permission-group-title {
+  color: #93c5fd;
+}
+
+.rbac-group-modal .permission-checkbox {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 22px;
+  margin-inline-end: 0;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.rbac-group-modal .permission-checkbox .ant-checkbox {
+  margin-top: 2px;
+}
+
+.rbac-group-modal .permission-checkbox .ant-checkbox + span,
+.rbac-group-modal .permission-checkbox.ant-checkbox-wrapper > span:last-child {
+  display: inline-block;
+  color: #e5e7eb !important;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.rbac-group-modal .permission-checkbox.ant-checkbox-wrapper-disabled .ant-checkbox + span,
+.rbac-group-modal .permission-checkbox.ant-checkbox-wrapper-disabled > span:last-child {
+  color: #9ca3af !important;
+}
+</style>

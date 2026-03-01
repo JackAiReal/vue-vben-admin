@@ -6,7 +6,7 @@ import type { PermissionGroup, RbacUser } from '#/api/maixu/rbac';
 import { computed, reactive, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
-import { useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
   Button,
@@ -31,10 +31,21 @@ import {
   setSystemUserEnabled,
 } from '#/api/maixu/user-manage';
 
+const accessStore = useAccessStore();
 const userStore = useUserStore();
 const isSuper = computed(() =>
   (userStore.userInfo?.roles || []).includes('super'),
 );
+
+function hasCode(code: string) {
+  const roles = userStore.userInfo?.roles || [];
+  if (roles.includes('super')) {
+    return true;
+  }
+  return accessStore.accessCodes.includes(code);
+}
+
+const canEditUserManage = computed(() => hasCode('MX_USER_EDIT'));
 
 const loading = ref(false);
 const groups = ref<PermissionGroup[]>([]);
@@ -168,6 +179,11 @@ function resetQuery() {
 }
 
 function openCreateModal() {
+  if (!canEditUserManage.value) {
+    message.warning('当前账号无用户管理编辑权限');
+    return;
+  }
+
   editing.value = null;
   userForm.username = '';
   userForm.email = '';
@@ -180,6 +196,11 @@ function openCreateModal() {
 }
 
 function openEditModal(record: RbacUser) {
+  if (!canEditUserManage.value) {
+    message.warning('当前账号无用户管理编辑权限');
+    return;
+  }
+
   editing.value = record;
   userForm.username = record.username;
   userForm.email = record.email || '';
@@ -192,6 +213,11 @@ function openEditModal(record: RbacUser) {
 }
 
 async function submitUser() {
+  if (!canEditUserManage.value) {
+    message.warning('当前账号无用户管理编辑权限');
+    return;
+  }
+
   if (!userForm.username.trim()) {
     message.warning('账号不能为空');
     return;
@@ -248,6 +274,11 @@ async function submitUser() {
 }
 
 async function removeUser(record: RbacUser) {
+  if (!canEditUserManage.value) {
+    message.warning('当前账号无用户管理编辑权限');
+    return;
+  }
+
   try {
     await removeSystemUser(record.id);
     await appendOperationLog('系统配置/用户管理', '删除用户', {
@@ -262,6 +293,11 @@ async function removeUser(record: RbacUser) {
 }
 
 async function toggleUserEnabled(record: RbacUser, enabled: boolean) {
+  if (!canEditUserManage.value) {
+    message.warning('当前账号无用户管理编辑权限');
+    return;
+  }
+
   try {
     await setSystemUserEnabled(record.id, enabled);
     await appendOperationLog(
@@ -325,7 +361,9 @@ reload();
         <Space class="mt-3">
           <Button type="primary" @click="handleSearch">查询</Button>
           <Button @click="resetQuery">重置</Button>
-          <Button type="primary" @click="openCreateModal">新增用户</Button>
+          <Button type="primary" :disabled="!canEditUserManage" @click="openCreateModal">
+            新增用户
+          </Button>
         </Space>
       </Card>
 
@@ -355,6 +393,7 @@ reload();
                 <Button
                   size="small"
                   type="link"
+                  :disabled="!canEditUserManage"
                   @click="openEditModal(asRbacUser(record))"
                 >
                   编辑
@@ -376,6 +415,7 @@ reload();
                     size="small"
                     type="link"
                     :danger="asRbacUser(record).enabled"
+                    :disabled="!canEditUserManage"
                   >
                     {{ asRbacUser(record).enabled ? '禁用' : '恢复' }}
                   </Button>
@@ -388,7 +428,7 @@ reload();
                     danger
                     size="small"
                     type="link"
-                    :disabled="asRbacUser(record).roles?.includes('super')"
+                    :disabled="!canEditUserManage || asRbacUser(record).roles?.includes('super')"
                   >
                     删除
                   </Button>
@@ -402,6 +442,7 @@ reload();
       <Modal
         v-model:open="modalOpen"
         :confirm-loading="saving"
+        :ok-button-props="{ disabled: !canEditUserManage }"
         :title="editing ? '编辑用户' : '新增用户'"
         width="680px"
         @ok="submitUser"

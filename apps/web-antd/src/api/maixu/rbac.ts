@@ -4,6 +4,8 @@ export interface PermissionDef {
   category: string;
   code: string;
   label: string;
+  menuGroup?: string;
+  order?: number;
 }
 
 export interface PermissionGroup {
