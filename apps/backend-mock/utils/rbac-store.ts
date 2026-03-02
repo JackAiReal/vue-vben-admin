@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
@@ -430,7 +430,13 @@ const DEFAULT_APPROVAL_BODY = [
   '请尽快处理。若 {{approve_timeout_hours}} 小时内未处理，系统将自动同意并执行。',
 ].join('\n');
 
-const DB_FILE = fileURLToPath(new URL('../.data/rbac.sqlite', import.meta.url));
+const DEFAULT_DB_FILE = fileURLToPath(
+  new URL('../.data/rbac.sqlite', import.meta.url),
+);
+const DB_FILE = process.env.RBAC_DB_FILE?.trim()
+  ? resolve(process.cwd(), process.env.RBAC_DB_FILE)
+  : DEFAULT_DB_FILE;
+
 if (!existsSync(dirname(DB_FILE))) {
   mkdirSync(dirname(DB_FILE), { recursive: true });
 }

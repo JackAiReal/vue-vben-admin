@@ -1,14 +1,14 @@
 {
-  "title": "Demos",
-  "antd": "Ant Design Vue",
+  "title": "Feature Center",
+  "antd": "UI Components",
   "vben": {
-    "title": "Project",
-    "about": "About",
-    "document": "Document",
-    "antdv": "Ant Design Vue Version",
-    "antdv-next": "Antdv Next Version",
-    "naive-ui": "Naive UI Version",
-    "element-plus": "Element Plus Version",
-    "tdesign": "TDesign Vue Version"
+    "title": "Platform Info",
+    "about": "System Intro",
+    "document": "Deployment Docs",
+    "antdv": "Current Frontend Version",
+    "antdv-next": "Alternative Frontend",
+    "naive-ui": "Alternative UI A",
+    "element-plus": "Alternative UI B",
+    "tdesign": "Alternative UI C"
   }
 }

@@ -25,199 +25,176 @@ import AnalyticsVisitsSource from '../analytics/analytics-visits-source.vue';
 
 const userStore = useUserStore();
 
-// 这是一个示例数据，实际项目中需要根据实际情况进行调整
-// url 也可以是内部路由，在 navTo 方法中识别处理，进行内部跳转
-// 例如：url: /dashboard/workspace
 const projectItems: WorkbenchProjectItem[] = [
   {
-    color: '',
-    content: '不要等待机会，而要创造机会。',
-    date: '2021-04-01',
-    group: '开源组',
-    icon: 'carbon:logo-github',
-    title: 'Github',
-    url: 'https://github.com',
+    color: '#2563eb',
+    content: '统一维护群配置、机器人状态与权限策略。',
+    date: '2026-03-02',
+    group: '运营核心',
+    icon: 'solar:users-group-rounded-bold-duotone',
+    title: '群列表管理',
+    url: '/maixu/group-list',
   },
   {
-    color: '#3fb27f',
-    content: '现在的你决定将来的你。',
-    date: '2021-04-01',
-    group: '算法组',
-    icon: 'ion:logo-vue',
-    title: 'Vue',
-    url: 'https://vuejs.org',
+    color: '#16a34a',
+    content: '支持按群、时间、用户维度快速检索麦序记录。',
+    date: '2026-03-02',
+    group: '数据查询',
+    icon: 'solar:document-text-bold-duotone',
+    title: '麦序查询',
+    url: '/maixu/order-query',
   },
   {
-    color: '#e18525',
-    content: '没有什么才能比努力更重要。',
-    date: '2021-04-01',
-    group: '上班摸鱼',
-    icon: 'ion:logo-html5',
-    title: 'Html5',
-    url: 'https://developer.mozilla.org/zh-CN/docs/Web/HTML',
+    color: '#f59e0b',
+    content: '统计高频关键词，辅助活动运营与风控分析。',
+    date: '2026-03-02',
+    group: '数据分析',
+    icon: 'solar:chart-bold-duotone',
+    title: '关键字统计',
+    url: '/maixu/keyword-stat',
   },
   {
-    color: '#bf0c2c',
-    content: '热情和欲望可以突破一切难关。',
-    date: '2021-04-01',
-    group: 'UI',
-    icon: 'ion:logo-angular',
-    title: 'Angular',
-    url: 'https://angular.io',
+    color: '#dc2626',
+    content: '统一管理置顶卡模板及发送策略，保证触达效果。',
+    date: '2026-03-02',
+    group: '内容运营',
+    icon: 'solar:bookmark-square-bold-duotone',
+    title: '置顶卡设置',
+    url: '/maixu/top-card',
   },
   {
-    color: '#00d8ff',
-    content: '健康的身体是实现目标的基石。',
-    date: '2021-04-01',
-    group: '技术牛',
-    icon: 'bx:bxl-react',
-    title: 'React',
-    url: 'https://reactjs.org',
+    color: '#7c3aed',
+    content: '面向业务侧账号，管理群绑定、查询与配置能力。',
+    date: '2026-03-02',
+    group: '用户侧运营',
+    icon: 'solar:user-check-bold-duotone',
+    title: '用户群列表',
+    url: '/maixu-user/group-list',
   },
   {
-    color: '#EBD94E',
-    content: '路是走出来的，而不是空想出来的。',
-    date: '2021-04-01',
-    group: '架构组',
-    icon: 'ion:logo-javascript',
-    title: 'Js',
-    url: 'https://developer.mozilla.org/zh-CN/docs/Web/JavaScript',
+    color: '#0f766e',
+    content: '完整记录关键操作和异常拦截，满足审计追踪。',
+    date: '2026-03-02',
+    group: '系统治理',
+    icon: 'solar:shield-check-bold-duotone',
+    title: '系统日志',
+    url: '/system-config/system-log',
   },
 ];
 
-// 同样，这里的 url 也可以使用以 http 开头的外部链接
 const quickNavItems: WorkbenchQuickNavItem[] = [
   {
-    color: '#1fdaca',
+    color: '#1d4ed8',
     icon: 'ion:home-outline',
-    title: '首页',
-    url: '/',
-  },
-  {
-    color: '#bf0c2c',
-    icon: 'ion:grid-outline',
-    title: '仪表盘',
-    url: '/dashboard',
-  },
-  {
-    color: '#e18525',
-    icon: 'ion:layers-outline',
-    title: '组件',
-    url: '/demos/features/icons',
-  },
-  {
-    color: '#3fb27f',
-    icon: 'ion:settings-outline',
-    title: '系统管理',
-    url: '/demos/features/login-expired', // 这里的 URL 是示例，实际项目中需要根据实际情况进行调整
-  },
-  {
-    color: '#4daf1bc9',
-    icon: 'ion:key-outline',
-    title: '权限管理',
-    url: '/demos/access/page-control',
-  },
-  {
-    color: '#00d8ff',
-    icon: 'ion:bar-chart-outline',
-    title: '图表',
+    title: '运营概览',
     url: '/analytics',
+  },
+  {
+    color: '#dc2626',
+    icon: 'ion:people-outline',
+    title: '群列表管理',
+    url: '/maixu/group-list',
+  },
+  {
+    color: '#16a34a',
+    icon: 'ion:list-outline',
+    title: '麦序查询',
+    url: '/maixu/order-query',
+  },
+  {
+    color: '#f59e0b',
+    icon: 'ion:stats-chart-outline',
+    title: '关键字统计',
+    url: '/maixu/keyword-stat',
+  },
+  {
+    color: '#7c3aed',
+    icon: 'ion:git-pull-request-outline',
+    title: '提交申请',
+    url: '/apply-business/submit',
+  },
+  {
+    color: '#0f766e',
+    icon: 'ion:settings-outline',
+    title: '系统日志',
+    url: '/system-config/system-log',
   },
 ];
 
 const todoItems = ref<WorkbenchTodoItem[]>([
   {
     completed: false,
-    content: `审查最近提交到Git仓库的前端代码，确保代码质量和规范。`,
-    date: '2024-07-30 11:00:00',
-    title: '审查前端代码提交',
+    content: '核对异常群配置并确认是否需要暂停机器人服务。',
+    date: '2026-03-02 10:30:00',
+    title: '处理群配置异常告警',
+  },
+  {
+    completed: false,
+    content: '复核今日待审批申请，优先处理即将超时单据。',
+    date: '2026-03-02 11:00:00',
+    title: '审批任务处理',
   },
   {
     completed: true,
-    content: `检查并优化系统性能，降低CPU使用率。`,
-    date: '2024-07-30 11:00:00',
-    title: '系统性能优化',
+    content: '完成签名拦截日志抽样，确认无误报。',
+    date: '2026-03-02 09:20:00',
+    title: '签名风控巡检',
   },
   {
     completed: false,
-    content: `进行系统安全检查，确保没有安全漏洞或未授权的访问。 `,
-    date: '2024-07-30 11:00:00',
-    title: '安全检查',
+    content: '导出麦序报表并同步给运营团队复盘。',
+    date: '2026-03-02 16:00:00',
+    title: '生成运营日报',
   },
   {
     completed: false,
-    content: `更新项目中的所有npm依赖包，确保使用最新版本。`,
-    date: '2024-07-30 11:00:00',
-    title: '更新项目依赖',
-  },
-  {
-    completed: false,
-    content: `修复用户报告的页面UI显示问题，确保在不同浏览器中显示一致。 `,
-    date: '2024-07-30 11:00:00',
-    title: '修复UI显示问题',
+    content: '检查邮件通知配置，确保审批提醒正常送达。',
+    date: '2026-03-02 17:30:00',
+    title: '通知链路检查',
   },
 ]);
+
 const trendItems: WorkbenchTrendItem[] = [
   {
     avatar: 'svg:avatar-1',
-    content: `在 <a>开源组</a> 创建了项目 <a>Vue</a>`,
+    content: '在 <a>麦序机器人/群列表</a> 更新了群配置。',
     date: '刚刚',
-    title: '威廉',
+    title: '运营账号A',
   },
   {
     avatar: 'svg:avatar-2',
-    content: `关注了 <a>威廉</a> `,
-    date: '1个小时前',
-    title: '艾文',
+    content: '在 <a>申请业务/我的审批</a> 处理了 1 条申请。',
+    date: '18分钟前',
+    title: '审批账号B',
   },
   {
     avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1天前',
-    title: '克里斯',
+    content: '在 <a>系统配置/系统日志</a> 新增风控审计记录。',
+    date: '35分钟前',
+    title: '系统账号C',
   },
   {
     avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写一个Vite插件</a> `,
-    date: '2天前',
-    title: 'Vben',
+    content: '在 <a>麦序机器人/麦序查询</a> 导出了运营报表。',
+    date: '1小时前',
+    title: '运营账号D',
   },
   {
     avatar: 'svg:avatar-1',
-    content: `回复了 <a>杰克</a> 的问题 <a>如何进行项目优化？</a>`,
-    date: '3天前',
-    title: '皮特',
+    content: '在 <a>麦序机器人-用户/群列表</a> 完成群绑定。',
+    date: '2小时前',
+    title: '业务账号E',
   },
   {
     avatar: 'svg:avatar-2',
-    content: `关闭了问题 <a>如何运行项目</a> `,
-    date: '1周前',
-    title: '杰克',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1周前',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `推送了代码到 <a>Github</a>`,
-    date: '2021-04-01 20:00',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写使用 Admin Vben</a> `,
-    date: '2021-03-01 20:00',
-    title: 'Vben',
+    content: '在 <a>系统配置/通知设置</a> 更新了审批邮件模板。',
+    date: '今天 09:20',
+    title: '管理员',
   },
 ];
 
 const router = useRouter();
 
-// 这是一个示例方法，实际项目中需要根据实际情况进行调整
-// This is a sample method, adjust according to the actual project requirements
 function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
   if (nav.url?.startsWith('http')) {
     openWindow(nav.url);
@@ -239,14 +216,16 @@ function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
       :avatar="userStore.userInfo?.avatar || preferences.app.defaultAvatar"
     >
       <template #title>
-        早安, {{ userStore.userInfo?.realName }}, 开始您一天的工作吧！
+        你好，{{ userStore.userInfo?.realName }}，开始处理今日语聊运营任务。
       </template>
-      <template #description> 今日晴，20℃ - 32℃！ </template>
+      <template #description>
+        当前服务状态：前端在线 · 代理在线 · 后端在线
+      </template>
     </WorkbenchHeader>
 
     <div class="mt-5 flex flex-col lg:flex-row">
       <div class="mr-4 w-full lg:w-3/5">
-        <WorkbenchProject :items="projectItems" title="项目" @click="navTo" />
+        <WorkbenchProject :items="projectItems" title="核心功能" @click="navTo" />
         <WorkbenchTrends :items="trendItems" class="mt-5" title="最新动态" />
       </div>
       <div class="w-full lg:w-2/5">

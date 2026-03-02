@@ -3,7 +3,9 @@ import { useAccessStore } from '@vben/stores';
 const DEFAULT_GINGER_API_BASE = '/api/ginger';
 const SIGN_ALGORITHM = 'MX_CUSTOM_V1';
 const SIGN_SCOPE = 'maixu';
-const SIGN_SALT = 'mx-custom-v1';
+const SIGN_SALT =
+  (import.meta.env.VITE_MX_SIGN_SALT as string | undefined)?.trim() ||
+  'mx-custom-v1';
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);

@@ -1,14 +1,14 @@
 {
-  "title": "演示",
-  "antd": "Ant Design Vue",
+  "title": "功能中心",
+  "antd": "界面组件",
   "vben": {
-    "title": "项目",
-    "about": "关于",
-    "document": "文档",
-    "antdv": "Ant Design Vue 版本",
-    "antdv-next": "Antdv Next 版本",
-    "naive-ui": "Naive UI 版本",
-    "element-plus": "Element Plus 版本",
-    "tdesign": "TDesign Vue 版本"
+    "title": "平台信息",
+    "about": "系统说明",
+    "document": "部署文档",
+    "antdv": "当前前端版本",
+    "antdv-next": "备选前端方案",
+    "naive-ui": "备选 UI 方案 A",
+    "element-plus": "备选 UI 方案 B",
+    "tdesign": "备选 UI 方案 C"
   }
 }

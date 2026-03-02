@@ -1,8 +1,11 @@
 const SIGN_ALGORITHM = 'MX_CUSTOM_V1';
 const SIGN_SCOPE = 'maixu';
-const SIGN_SALT = 'mx-custom-v1';
-const MAX_CLOCK_SKEW_MS = 10 * 60 * 1000;
-const NONCE_TTL_MS = 10 * 60 * 1000;
+const SIGN_SALT = process.env.MX_SIGN_SALT?.trim() || 'mx-custom-v1';
+const MAX_CLOCK_SKEW_MS =
+  Number(process.env.MX_MAX_CLOCK_SKEW_MS || 10 * 60 * 1000) ||
+  10 * 60 * 1000;
+const NONCE_TTL_MS =
+  Number(process.env.MX_NONCE_TTL_MS || 10 * 60 * 1000) || 10 * 60 * 1000;
 
 interface RegisterSignSessionPayload {
   algorithm: string;

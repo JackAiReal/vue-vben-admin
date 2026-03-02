@@ -5,3 +5,7 @@ node_modules
 dist
 .turbo
 dist.zip
+**/.output
+**/.nitro
+**/.data
+apps/**/dist

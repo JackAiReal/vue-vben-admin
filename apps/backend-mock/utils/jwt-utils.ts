@@ -5,9 +5,10 @@ import jwt from 'jsonwebtoken';
 
 import { getUserByUsername } from './rbac-store';
 
-// TODO: Replace with your own secret key
-const ACCESS_TOKEN_SECRET = 'access_token_secret';
-const REFRESH_TOKEN_SECRET = 'refresh_token_secret';
+const ACCESS_TOKEN_SECRET =
+  process.env.ACCESS_TOKEN_SECRET?.trim() || 'access_token_secret';
+const REFRESH_TOKEN_SECRET =
+  process.env.REFRESH_TOKEN_SECRET?.trim() || 'refresh_token_secret';
 
 interface JwtUserInfo {
   email?: string;
