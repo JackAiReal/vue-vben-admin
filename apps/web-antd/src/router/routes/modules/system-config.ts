@@ -39,6 +39,15 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'SystemBackup',
+        path: '/system-config/backup',
+        component: () => import('#/views/system-config/backup/index.vue'),
+        meta: {
+          authority: ['super'],
+          title: '导出备份',
+        },
+      },
+      {
         name: 'SystemOperationLog',
         path: '/system-config/operation-log',
         component: () =>

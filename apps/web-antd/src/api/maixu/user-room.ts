@@ -9,6 +9,19 @@ export interface UserRoomBindingItem {
   username?: string;
 }
 
+export interface QueryUserRoomBindingsParams {
+  page?: number;
+  pageSize?: number;
+  userName: string;
+}
+
+export interface QueryUserRoomBindingsResult {
+  list: UserRoomBindingItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface ConsumeBindCodeResult {
   bindCode?: string;
   expiresAt?: string;
@@ -81,13 +94,45 @@ function normalizeConsumeResult(value: any): ConsumeBindCodeResult {
   };
 }
 
-export async function fetchUserRoomBindings(userName: string) {
-  const data = await requestJson('/v1/room_bind/list_user_rooms', {
-    body: JSON.stringify({ user_name: userName }),
+export async function queryUserRoomBindings(
+  params: QueryUserRoomBindingsParams,
+) {
+  const payload = {
+    include_config: false,
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+    user_name: params.userName,
+  };
+
+  const result = await requestJson('/v1/room_bind/list_user_rooms', {
+    body: JSON.stringify(payload),
     method: 'POST',
   });
 
-  return Array.isArray(data) ? data.map(normalizeBinding) : [];
+  const data = (result && result.data) || {};
+  return {
+    list: Array.isArray(data.list) ? data.list.map(normalizeBinding) : [],
+    page: Number(data.page || 1),
+    pageSize: Number(data.page_size || 20),
+    total: Number(data.total || 0),
+  } as QueryUserRoomBindingsResult;
+}
+
+export async function fetchUserRoomBindings(userName: string) {
+  const data = await requestJson('/v1/room_bind/list_user_rooms', {
+    body: JSON.stringify({ include_config: false, user_name: userName }),
+    method: 'POST',
+  });
+
+  if (Array.isArray(data)) {
+    return data.map(normalizeBinding);
+  }
+
+  if (data && typeof data === 'object' && Array.isArray((data as any).list)) {
+    return (data as any).list.map(normalizeBinding);
+  }
+
+  return [];
 }
 
 export async function consumeUserRoomBindCode(code: string, userName: string) {

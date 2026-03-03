@@ -25,6 +25,20 @@ export interface UpdateRoomConfigRawPayload {
   room_wxid: string;
 }
 
+export interface QueryMaixuRoomParams {
+  includeConfig?: boolean;
+  keyword?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface QueryMaixuRoomResult {
+  list: MaixuRoomItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 function safeParseJson(raw: string) {
   try {
     return JSON.parse(raw);
@@ -153,6 +167,30 @@ function normalizeRoomList(raw: unknown) {
       : [];
 
   return sortRoomsByUpdateTimeDesc(list.map((item) => normalizeRoom(item)));
+}
+
+export async function queryMaixuRooms(params: QueryMaixuRoomParams = {}) {
+  const payload = {
+    include_config: params.includeConfig ?? true,
+    keyword: params.keyword ?? '',
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+  };
+
+  const raw = await requestJson('/v1/room_super/query?admin=true', {
+    body: JSON.stringify(payload),
+    method: 'POST',
+  });
+
+  const data = (raw && (raw as any).data) || {};
+  const list = Array.isArray(data.list) ? data.list : [];
+
+  return {
+    list: sortRoomsByUpdateTimeDesc(list.map((item: any) => normalizeRoom(item))),
+    page: Number(data.page || payload.page),
+    pageSize: Number(data.page_size || payload.page_size),
+    total: Number(data.total || 0),
+  } as QueryMaixuRoomResult;
 }
 
 export async function fetchMaixuRooms() {

@@ -31,7 +31,7 @@ import {
 } from '#/api/maixu/member';
 import { appendOperationLog } from '#/api/maixu/operation-log';
 import {
-  fetchMaixuRooms,
+  queryMaixuRooms,
   updateMaixuRoomConfig,
   updateMaixuRoomConfigItem,
 } from '#/api/maixu/room';
@@ -45,6 +45,7 @@ const rooms = ref<MaixuRoomItem[]>([]);
 const keyword = ref('');
 const paginationCurrent = ref(1);
 const paginationPageSize = ref(10);
+const roomsTotal = ref(0);
 
 const configModalOpen = ref(false);
 const configSaving = ref(false);
@@ -400,19 +401,7 @@ const memberColumns: TableColumnsType<WxRoomMember> = [
   { title: '操作', key: 'actions', width: 120, fixed: 'right' },
 ];
 
-const filteredRooms = computed(() => {
-  const text = keyword.value.trim().toLowerCase();
-  if (!text) {
-    return rooms.value;
-  }
-
-  return rooms.value.filter((room) => {
-    return (
-      room.room_name.toLowerCase().includes(text) ||
-      room.room_wxid.toLowerCase().includes(text)
-    );
-  });
-});
+const filteredRooms = computed(() => rooms.value);
 
 const tablePagination = computed<TablePaginationConfig>(() => ({
   current: paginationCurrent.value,
@@ -420,7 +409,7 @@ const tablePagination = computed<TablePaginationConfig>(() => ({
   showQuickJumper: true,
   showSizeChanger: true,
   showTotal: (total) => `共 ${total} 条`,
-  total: filteredRooms.value.length,
+  total: roomsTotal.value,
 }));
 
 const memberPagination = computed<TablePaginationConfig>(() => ({
@@ -448,11 +437,22 @@ const configValidationMessage = computed(() => {
   }
 });
 
-async function loadRooms() {
+async function loadRooms(
+  page = paginationCurrent.value,
+  pageSize = paginationPageSize.value,
+) {
   loading.value = true;
   try {
-    const list = await fetchMaixuRooms();
-    rooms.value = normalizeRooms(list);
+    const result = await queryMaixuRooms({
+      includeConfig: true,
+      keyword: keyword.value.trim(),
+      page,
+      pageSize,
+    });
+    rooms.value = normalizeRooms(result.list);
+    roomsTotal.value = result.total;
+    paginationCurrent.value = result.page;
+    paginationPageSize.value = result.pageSize;
     sortRoomsByTime();
   } catch (error) {
     const errorMessage =
@@ -950,8 +950,9 @@ function handleAction(action: string, record: MaixuRoomItem) {
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
-  paginationCurrent.value = pagination.current ?? 1;
-  paginationPageSize.value = pagination.pageSize ?? 10;
+  const nextPage = pagination.current ?? 1;
+  const nextSize = pagination.pageSize ?? 10;
+  loadRooms(nextPage, nextSize);
 }
 
 function handleMemberTableChange(pagination: TablePaginationConfig) {
@@ -975,8 +976,13 @@ loadRooms();
           allow-clear
           placeholder="搜索群名称或群 WXID"
           style="width: 260px"
+          @press-enter="() => loadRooms(1, paginationPageSize)"
         />
-        <Button :loading="loading" type="primary" @click="loadRooms">
+        <Button
+          :loading="loading"
+          type="primary"
+          @click="loadRooms(1, paginationPageSize)"
+        >
           刷新
         </Button>
         <Button :disabled="!canEditRoom" @click="openTransferModal">

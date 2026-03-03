@@ -182,17 +182,24 @@ const RBAC_PERMISSIONS: RbacPermission[] = [
   },
   {
     category: '左侧菜单',
+    code: 'MX_BACKUP_VIEW',
+    label: '系统配置 / 导出备份',
+    menuGroup: '系统配置',
+    order: 53,
+  },
+  {
+    category: '左侧菜单',
     code: 'MX_OPLOG_VIEW',
     label: '系统配置 / 操作日志',
     menuGroup: '系统配置',
-    order: 53,
+    order: 54,
   },
   {
     category: '左侧菜单',
     code: 'MX_SYSLOG_VIEW',
     label: '系统配置 / 系统日志',
     menuGroup: '系统配置',
-    order: 54,
+    order: 55,
   },
 
   {
@@ -312,10 +319,17 @@ const RBAC_PERMISSIONS: RbacPermission[] = [
   },
   {
     category: '按钮权限',
+    code: 'MX_BACKUP_EDIT',
+    label: '系统配置 / 导出备份：导出与导入数据库SQL',
+    menuGroup: '系统配置',
+    order: 143,
+  },
+  {
+    category: '按钮权限',
     code: 'MX_OPLOG_EDIT',
     label: '系统配置 / 操作日志：增删改',
     menuGroup: '系统配置',
-    order: 143,
+    order: 144,
   },
 
   {
@@ -361,6 +375,7 @@ const IMPLIED_VIEW_CODE_MAP: Record<string, string[]> = {
   MX_RBAC_EDIT: ['MX_RBAC_VIEW'],
   MX_USER_EDIT: ['MX_USER_VIEW'],
   MX_NOTIFY_EDIT: ['MX_NOTIFY_VIEW'],
+  MX_BACKUP_EDIT: ['MX_BACKUP_VIEW'],
   MX_OPLOG_EDIT: ['MX_OPLOG_VIEW'],
 };
 
@@ -380,6 +395,7 @@ const VIEW_ONLY_CODES = [
   'MX_USER_VIEW',
   'MX_RBAC_VIEW',
   'MX_NOTIFY_VIEW',
+  'MX_BACKUP_VIEW',
   'MX_OPLOG_VIEW',
   'MX_SYSLOG_VIEW',
   'MX_MEMBER_VIEW',
@@ -399,6 +415,7 @@ const EDITOR_CODES = [
   'MX_APPLY_SUBMIT_EDIT',
   'MX_APPLY_MINE_EDIT',
   'MX_NOTIFY_EDIT',
+  'MX_BACKUP_EDIT',
 ];
 
 const ALL_CODES = RBAC_PERMISSIONS.map((item) => item.code);
@@ -1308,6 +1325,146 @@ export function saveNotificationSettings(
   return getNotificationSettings();
 }
 
+function quoteIdentifier(name: string) {
+  return `"${String(name || '').replaceAll('"', '""')}"`;
+}
+
+export function exportRbacSql() {
+  const tableRows = db
+    .prepare(
+      `SELECT name, sql
+       FROM sqlite_master
+       WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL
+       ORDER BY name ASC`,
+    )
+    .all();
+
+  const objectRows = db
+    .prepare(
+      `SELECT type, name, sql
+       FROM sqlite_master
+       WHERE type IN ('index', 'trigger', 'view')
+         AND name NOT LIKE 'sqlite_%'
+         AND name NOT LIKE 'sqlite_autoindex_%'
+         AND sql IS NOT NULL
+       ORDER BY type ASC, name ASC`,
+    )
+    .all();
+
+  const lines: string[] = [];
+  lines.push(`-- RBAC backup generated at ${nowText()}`);
+  lines.push('PRAGMA foreign_keys=OFF;');
+  lines.push('');
+
+  for (const row of tableRows as Array<{ name: string; sql: string }>) {
+    const tableName = String(row.name || '').trim();
+    const createSql = String(row.sql || '').trim();
+    if (!tableName || !createSql) {
+      continue;
+    }
+
+    const tableIdent = quoteIdentifier(tableName);
+    lines.push(`DROP TABLE IF EXISTS ${tableIdent};`);
+    lines.push(`${createSql};`);
+
+    const columns = db
+      .prepare(`PRAGMA table_info(${tableIdent})`)
+      .all()
+      .map((item: any) => String(item.name || '').trim())
+      .filter(Boolean);
+
+    if (columns.length > 0) {
+      const columnList = columns.map((name) => quoteIdentifier(name)).join(', ');
+      const valueExpr = columns
+        .map((name) => `quote(${quoteIdentifier(name)})`)
+        .join(` || ', ' || `);
+
+      const insertSql = `SELECT 'INSERT INTO ${tableIdent} (${columnList}) VALUES (' || ${valueExpr} || ');' AS stmt FROM ${tableIdent}`;
+      const insertRows = db.prepare(insertSql).all() as Array<{ stmt: string }>;
+      for (const insertRow of insertRows) {
+        lines.push(String(insertRow.stmt || ''));
+      }
+    }
+
+    lines.push('');
+  }
+
+  for (const row of objectRows as Array<{ name: string; sql: string; type: string }>) {
+    const objectName = String(row.name || '').trim();
+    const createSql = String(row.sql || '').trim();
+    const objectType = String(row.type || '').trim().toLowerCase();
+    if (!objectName || !createSql || !objectType) {
+      continue;
+    }
+
+    const objectIdent = quoteIdentifier(objectName);
+    if (objectType === 'index') {
+      lines.push(`DROP INDEX IF EXISTS ${objectIdent};`);
+    } else if (objectType === 'trigger') {
+      lines.push(`DROP TRIGGER IF EXISTS ${objectIdent};`);
+    } else if (objectType === 'view') {
+      lines.push(`DROP VIEW IF EXISTS ${objectIdent};`);
+    }
+    lines.push(`${createSql};`);
+  }
+
+  lines.push('');
+  lines.push('PRAGMA foreign_keys=ON;');
+
+  return {
+    filename: `rbac-backup-${nowText().replaceAll(/[:\s]/g, '-')}.sql`,
+    sql: lines.join('\n'),
+  };
+}
+
+export function importRbacSql(sqlText: string) {
+  const script = String(sqlText || '').trim();
+  if (!script) {
+    throw new Error('SQL内容不能为空');
+  }
+
+  const rollbackSql = exportRbacSql().sql;
+
+  try {
+    db.exec('PRAGMA foreign_keys=OFF;');
+    db.exec('BEGIN IMMEDIATE;');
+    db.exec(script);
+    db.exec('COMMIT;');
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK;');
+    } catch {
+      // ignore
+    }
+
+    try {
+      db.exec('PRAGMA foreign_keys=OFF;');
+      db.exec('BEGIN IMMEDIATE;');
+      db.exec(rollbackSql);
+      db.exec('COMMIT;');
+    } catch {
+      try {
+        db.exec('ROLLBACK;');
+      } catch {
+        // ignore
+      }
+      throw new Error('导入失败，且自动回滚失败，请使用备份手动恢复');
+    }
+
+    throw new Error(
+      `导入失败，已自动回滚：${error instanceof Error ? error.message : '未知错误'}`,
+    );
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON;');
+  }
+
+  ensureBuiltinGroupPermissions();
+
+  return {
+    importedAt: nowText(),
+  };
+}
+
 function sendEmailBySettings(options: {
   appName: string;
   bodyTemplate?: string;
@@ -1738,6 +1895,14 @@ export function getUserMenus(username: string) {
       meta: { affixTab: false, title: '通知设置' },
       name: 'SystemNotifySettings',
       path: '/system-config/notify-settings',
+    });
+  }
+  if (isSuper && has('MX_BACKUP_VIEW')) {
+    systemChildren.push({
+      component: '/system-config/backup/index',
+      meta: { affixTab: false, title: '导出备份' },
+      name: 'SystemBackup',
+      path: '/system-config/backup',
     });
   }
   if (has('MX_OPLOG_VIEW')) {

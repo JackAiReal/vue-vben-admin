@@ -29,7 +29,7 @@ import { appendOperationLog } from '#/api/maixu/operation-log';
 import {
   consumeUserRoomBindCode,
   deleteUserRoomBinding,
-  fetchUserRoomBindings,
+  queryUserRoomBindings,
 } from '#/api/maixu/user-room';
 import {
   deleteMaixuRoom,
@@ -54,6 +54,7 @@ const rooms = ref<MaixuRoomItem[]>([]);
 const keyword = ref('');
 const paginationCurrent = ref(1);
 const paginationPageSize = ref(10);
+const roomsTotal = ref(0);
 
 type ConfigFieldType =
   | 'boolean'
@@ -557,7 +558,7 @@ const tablePagination = computed<TablePaginationConfig>(() => ({
   showQuickJumper: true,
   showSizeChanger: true,
   showTotal: (total) => `共 ${total} 条`,
-  total: filteredRooms.value.length,
+  total: keyword.value.trim() ? filteredRooms.value.length : roomsTotal.value,
 }));
 
 const memberPagination = computed<TablePaginationConfig>(() => ({
@@ -660,17 +661,31 @@ function hasCode(code: string) {
 
 const canEditUserGroup = computed(() => hasCode('MX_USER_GROUP_EDIT'));
 
-async function loadRooms() {
+async function loadRooms(
+  page = paginationCurrent.value,
+  pageSize = paginationPageSize.value,
+) {
   const username = currentUsername.value;
   if (!username) {
     message.warning('未获取到当前账号，请重新登录后重试');
     rooms.value = [];
+    roomsTotal.value = 0;
     return;
   }
 
   loading.value = true;
   try {
-    const bindings = await fetchUserRoomBindings(username);
+    const bindingsResult = await queryUserRoomBindings({
+      page,
+      pageSize,
+      userName: username,
+    });
+
+    paginationCurrent.value = bindingsResult.page;
+    paginationPageSize.value = bindingsResult.pageSize;
+    roomsTotal.value = bindingsResult.total;
+
+    const bindings = bindingsResult.list;
     const roomIds = bindings
       .map((item) => normalizeRoomKey(item.roomWxid))
       .filter(Boolean);
@@ -749,7 +764,7 @@ async function bindRoomByCode() {
     });
 
     message.success(`绑定成功：${result.roomName || result.roomWxid}`);
-    await loadRooms();
+    await loadRooms(1, paginationPageSize.value);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : '绑定失败';
     message.error(errorMessage);
@@ -912,6 +927,12 @@ async function removeRoom(record: MaixuRoomItem) {
     rooms.value = rooms.value.filter(
       (room) => normalizeRoomKey(room.room_wxid) !== normalizeRoomKey(record.room_wxid),
     );
+    roomsTotal.value = Math.max(0, roomsTotal.value - 1);
+
+    const fallbackPage = rooms.value.length === 0 && paginationCurrent.value > 1
+      ? paginationCurrent.value - 1
+      : paginationCurrent.value;
+    await loadRooms(fallbackPage, paginationPageSize.value);
 
     message.success(deleteMessage || '群聊已删除');
   } catch (error) {
@@ -974,8 +995,9 @@ function asRoom(record: Record<string, any>) {
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
-  paginationCurrent.value = pagination.current ?? 1;
-  paginationPageSize.value = pagination.pageSize ?? 10;
+  const nextPage = pagination.current ?? 1;
+  const nextSize = pagination.pageSize ?? 10;
+  loadRooms(nextPage, nextSize);
 }
 
 function handleMemberTableChange(pagination: TablePaginationConfig) {
