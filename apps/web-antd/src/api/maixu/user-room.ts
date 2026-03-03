@@ -2,9 +2,11 @@ import { fetchMaixu } from './request';
 
 export interface UserRoomBindingItem {
   createdAt?: string;
+  id?: number;
   roomName: string;
   roomWxid: string;
   sourceWxid?: string;
+  status?: number;
   updatedAt?: string;
   username?: string;
 }
@@ -83,10 +85,12 @@ async function requestJson(path: string, init?: RequestInit) {
 
 function normalizeBinding(value: any): UserRoomBindingItem {
   return {
-    createdAt: String(value?.created_at || value?.createdAt || ''),
+    createdAt: String(value?.create_time || value?.created_at || value?.createdAt || ''),
+    id: Number(value?.id || 0) || undefined,
     roomName: String(value?.room_name || value?.roomName || ''),
     roomWxid: String(value?.room_wxid || value?.roomWxid || ''),
     sourceWxid: String(value?.from_wxid || value?.sourceWxid || ''),
+    status: Number(value?.status || 0) || undefined,
     updatedAt: String(value?.update_time || value?.updatedAt || ''),
     username: String(value?.user_name || value?.username || ''),
   };
@@ -103,13 +107,22 @@ function normalizeConsumeResult(value: any): ConsumeBindCodeResult {
   };
 }
 
+function toPositiveInt(value: unknown, fallback: number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  const intValue = Math.floor(numeric);
+  return intValue >= 1 ? intValue : fallback;
+}
+
 export async function queryUserRoomBindings(
   params: QueryUserRoomBindingsParams,
 ) {
   const payload = {
     include_config: false,
-    page: params.page ?? 1,
-    page_size: params.pageSize ?? 20,
+    page: toPositiveInt(params.page, 1),
+    page_size: toPositiveInt(params.pageSize, 20),
     user_name: params.userName,
   };
 

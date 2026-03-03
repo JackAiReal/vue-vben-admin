@@ -695,13 +695,17 @@ async function loadRooms(
       return;
     }
 
-    const roomList = await fetchMaixuRoomsByIds(roomIds);
     const roomMap = new Map<string, MaixuRoomItem>();
-    for (const room of roomList) {
-      const key = normalizeRoomKey(room.room_wxid);
-      if (key) {
-        roomMap.set(key, sanitizeRoomRecord(room));
+    try {
+      const roomList = await fetchMaixuRoomsByIds(roomIds);
+      for (const room of roomList) {
+        const key = normalizeRoomKey(room.room_wxid);
+        if (key) {
+          roomMap.set(key, sanitizeRoomRecord(room));
+        }
       }
+    } catch {
+      // keep fallback rows from binding list when room detail request fails
     }
 
     const mergedRooms: MaixuRoomItem[] = [];
@@ -720,7 +724,7 @@ async function loadRooms(
         room_config: {},
         room_name: bind.roomName || roomWxid,
         room_wxid: roomWxid,
-        status: 1,
+        status: bind.status ?? 1,
         update_time: bind.updatedAt || formatDateTime(new Date()),
       });
     }
