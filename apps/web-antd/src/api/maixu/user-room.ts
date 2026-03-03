@@ -50,11 +50,20 @@ function readErrorMessage(parsed: any, status: number) {
 }
 
 function readSuccessData(parsed: any) {
-  if (parsed && typeof parsed === 'object' && 'code' in parsed) {
-    if (Number(parsed.code) !== 0) {
-      throw new Error(String(parsed.msg || parsed.message || '请求失败'));
+  if (parsed && typeof parsed === 'object') {
+    if ('code' in parsed) {
+      if (Number(parsed.code) !== 0) {
+        throw new Error(String(parsed.msg || parsed.message || '请求失败'));
+      }
+      return parsed.data;
     }
-    return parsed.data;
+
+    if ('error_code' in parsed) {
+      if (Number(parsed.error_code) !== 0) {
+        throw new Error(String(parsed.msg || parsed.message || '请求失败'));
+      }
+      return parsed.data ?? parsed;
+    }
   }
   return parsed;
 }
@@ -109,7 +118,10 @@ export async function queryUserRoomBindings(
     method: 'POST',
   });
 
-  const data = (result && result.data) || {};
+  const data =
+    result && typeof result === 'object'
+      ? (result as Record<string, any>)
+      : {};
   return {
     list: Array.isArray(data.list) ? data.list.map(normalizeBinding) : [],
     page: Number(data.page || 1),
@@ -141,7 +153,11 @@ export async function consumeUserRoomBindCode(code: string, userName: string) {
     method: 'POST',
   });
 
-  return normalizeConsumeResult(data || {});
+  const normalized = normalizeConsumeResult(data || {});
+  if (!normalized.roomWxid) {
+    throw new Error('绑定失败，验证码无效或已过期');
+  }
+  return normalized;
 }
 
 export async function deleteUserRoomBinding(roomWxid: string, userName: string) {
