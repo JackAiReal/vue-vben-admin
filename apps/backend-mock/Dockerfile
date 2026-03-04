@@ -21,6 +21,8 @@ ENV PORT=5320
 
 COPY --from=builder /app/apps/backend-mock/.output /app/.output
 
+RUN npm --prefix /app/.output/server install --omit=dev --no-audit --no-fund
+
 EXPOSE 5320
 
 CMD ["node", "/app/.output/server/index.mjs"]

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import nodemailer from 'nodemailer';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
@@ -1493,14 +1493,6 @@ function sendEmailBySettings(options: {
     variables,
   );
 
-  const require = createRequire(import.meta.url);
-  let nodemailer: any;
-  try {
-    nodemailer = require('nodemailer');
-  } catch {
-    throw new Error('邮件依赖缺失，请安装 nodemailer 后重试');
-  }
-
   const transporter = nodemailer.createTransport({
     auth: {
       pass: settings.smtpPassword,
@@ -1617,14 +1609,6 @@ export async function testApprovalNotificationSettings(payload: {
 
   const subject = fillTemplate(settings.approvalSubjectTemplate, context);
   const body = fillTemplate(settings.approvalBodyTemplate, context);
-
-  const require = createRequire(import.meta.url);
-  let nodemailer: any;
-  try {
-    nodemailer = require('nodemailer');
-  } catch {
-    throw new Error('邮件依赖缺失，请安装 nodemailer 后重试');
-  }
 
   const transporter = nodemailer.createTransport({
     auth: {
