@@ -447,6 +447,8 @@ const DEFAULT_APPROVAL_BODY = [
   '请尽快处理。若 {{approve_timeout_hours}} 小时内未处理，系统将自动同意并执行。',
 ].join('\n');
 
+const DEFAULT_REGISTER_GROUP_SETTING_KEY = 'default_register_group_id';
+
 const DEFAULT_DB_FILE = fileURLToPath(
   new URL('../.data/rbac.sqlite', import.meta.url),
 );
@@ -531,6 +533,12 @@ CREATE TABLE IF NOT EXISTS email_verification_codes (
   used INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `);
 
 function ensureColumn(tableName: string, columnName: string, ddl: string) {
@@ -568,6 +576,32 @@ function nowText() {
   const date = new Date();
   const pad = (value: number) => `${value}`.padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function resolveFallbackDefaultGroupId() {
+  const viewGroup = db
+    .prepare('SELECT id FROM rbac_groups WHERE name = ? LIMIT 1')
+    .get('查看权限组');
+  if (viewGroup?.id) {
+    return Number(viewGroup.id);
+  }
+
+  const firstGroup = db
+    .prepare('SELECT id FROM rbac_groups ORDER BY id ASC LIMIT 1')
+    .get();
+  if (firstGroup?.id) {
+    return Number(firstGroup.id);
+  }
+
+  throw new Error('默认用户组不存在，请联系管理员');
+}
+
+function upsertDefaultRegisterGroupId(groupId: number) {
+  db.prepare(
+    `INSERT INTO system_settings (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).run(DEFAULT_REGISTER_GROUP_SETTING_KEY, String(groupId), nowText());
 }
 
 function toSafePermissions(value: unknown) {
@@ -678,6 +712,18 @@ function seedDefaults() {
       now,
       now,
     );
+  }
+
+  const settingRow = db
+    .prepare('SELECT value FROM system_settings WHERE key = ? LIMIT 1')
+    .get(DEFAULT_REGISTER_GROUP_SETTING_KEY);
+  const settingGroupId = Number(settingRow?.value || 0);
+  const settingGroupExists =
+    settingGroupId > 0
+      ? db.prepare('SELECT id FROM rbac_groups WHERE id = ? LIMIT 1').get(settingGroupId)
+      : null;
+  if (!settingGroupExists) {
+    upsertDefaultRegisterGroupId(resolveFallbackDefaultGroupId());
   }
 
   const userCount = Number(
@@ -882,6 +928,10 @@ export function deleteGroup(id: number) {
   }
   if (Number(target.readonly) === 1) {
     throw new Error('系统内置分组不允许删除');
+  }
+
+  if (Number(target.id) === getDefaultUserGroupId()) {
+    throw new Error('该分组为默认注册权限组，请先切换默认分组');
   }
 
   const userCount = Number(
@@ -1184,22 +1234,45 @@ export function setUserEnabled(id: number, enabled: boolean) {
   return listUsers().find((item) => item.id === id);
 }
 
+export function getDefaultRegisterGroupSetting() {
+  return { groupId: getDefaultUserGroupId() };
+}
+
+export function setDefaultRegisterGroup(groupId: number) {
+  const normalizedId = Number(groupId || 0);
+  if (!normalizedId) {
+    throw new Error('默认注册权限组不能为空');
+  }
+
+  const group = db
+    .prepare('SELECT id FROM rbac_groups WHERE id = ? LIMIT 1')
+    .get(normalizedId);
+  if (!group?.id) {
+    throw new Error('默认注册权限组不存在');
+  }
+
+  upsertDefaultRegisterGroupId(normalizedId);
+  return { groupId: normalizedId };
+}
+
 function getDefaultUserGroupId() {
-  const viewGroup = db
-    .prepare('SELECT id FROM rbac_groups WHERE name = ? LIMIT 1')
-    .get('查看权限组');
-  if (viewGroup?.id) {
-    return Number(viewGroup.id);
+  const settingRow = db
+    .prepare('SELECT value FROM system_settings WHERE key = ? LIMIT 1')
+    .get(DEFAULT_REGISTER_GROUP_SETTING_KEY);
+
+  const settingGroupId = Number(settingRow?.value || 0);
+  if (settingGroupId > 0) {
+    const exists = db
+      .prepare('SELECT id FROM rbac_groups WHERE id = ? LIMIT 1')
+      .get(settingGroupId);
+    if (exists?.id) {
+      return Number(exists.id);
+    }
   }
 
-  const firstGroup = db
-    .prepare('SELECT id FROM rbac_groups ORDER BY id ASC LIMIT 1')
-    .get();
-  if (firstGroup?.id) {
-    return Number(firstGroup.id);
-  }
-
-  throw new Error('默认用户组不存在，请联系管理员');
+  const fallbackId = resolveFallbackDefaultGroupId();
+  upsertDefaultRegisterGroupId(fallbackId);
+  return fallbackId;
 }
 
 function randomDigits(length = 6) {

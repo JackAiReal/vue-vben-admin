@@ -30,9 +30,11 @@ import { appendOperationLog } from '#/api/maixu/operation-log';
 import {
   deletePermissionGroup,
   deleteRbacUser,
+  fetchDefaultRegisterGroupSetting,
   fetchPermissionDefs,
   fetchPermissionGroups,
   fetchRbacUsers,
+  saveDefaultRegisterGroupSetting,
   savePermissionGroup,
   saveRbacUser,
 } from '#/api/maixu/rbac';
@@ -46,6 +48,8 @@ const loading = ref(false);
 const permissionDefs = ref<PermissionDef[]>([]);
 const groups = ref<PermissionGroup[]>([]);
 const users = ref<RbacUser[]>([]);
+const defaultRegisterGroupId = ref<number>(0);
+const savingDefaultRegisterGroup = ref(false);
 
 const groupModalOpen = ref(false);
 const savingGroup = ref(false);
@@ -181,18 +185,48 @@ async function loadData() {
 
   loading.value = true;
   try {
-    const [defs, groupList, userList] = await Promise.all([
+    const [defs, groupList, userList, defaultGroupSetting] = await Promise.all([
       fetchPermissionDefs(),
       fetchPermissionGroups(),
       fetchRbacUsers(),
+      fetchDefaultRegisterGroupSetting(),
     ]);
     permissionDefs.value = defs;
     groups.value = groupList;
     users.value = userList;
+    defaultRegisterGroupId.value = Number(defaultGroupSetting.groupId || 0);
   } catch (error) {
     message.error(error instanceof Error ? error.message : '加载权限数据失败');
   } finally {
     loading.value = false;
+  }
+}
+
+async function saveDefaultGroupSetting() {
+  if (!defaultRegisterGroupId.value) {
+    message.warning('请先选择默认注册权限组');
+    return;
+  }
+
+  savingDefaultRegisterGroup.value = true;
+  try {
+    const result = await saveDefaultRegisterGroupSetting(defaultRegisterGroupId.value);
+    defaultRegisterGroupId.value = Number(result.groupId || defaultRegisterGroupId.value);
+
+    const groupName =
+      groups.value.find((item) => item.id === defaultRegisterGroupId.value)?.name ||
+      String(defaultRegisterGroupId.value);
+
+    await appendOperationLog('系统配置/权限分组管理', '设置默认注册权限组', {
+      defaultGroupId: defaultRegisterGroupId.value,
+      defaultGroupName: groupName,
+    });
+
+    message.success('默认注册权限组已更新');
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '设置默认权限组失败');
+  } finally {
+    savingDefaultRegisterGroup.value = false;
   }
 }
 
@@ -356,8 +390,24 @@ loadData();
 
     <template v-else>
       <Card class="mb-4" title="权限组管理">
-        <div class="mb-3">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
           <Button type="primary" @click="openCreateGroup">新增权限组</Button>
+          <Space>
+            <span class="text-sm text-gray-500">默认注册权限组</span>
+            <Select
+              v-model:value="defaultRegisterGroupId"
+              :options="groupOptions"
+              style="min-width: 220px"
+              placeholder="选择默认权限组"
+            />
+            <Button
+              type="primary"
+              :loading="savingDefaultRegisterGroup"
+              @click="saveDefaultGroupSetting"
+            >
+              保存默认组
+            </Button>
+          </Space>
         </div>
         <Table
           :columns="groupColumns"

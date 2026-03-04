@@ -47,12 +47,26 @@ export interface SaveUserPayload {
   username: string;
 }
 
+export interface DefaultRegisterGroupSetting {
+  groupId: number;
+}
+
 export async function fetchPermissionDefs() {
   return requestClient.get<PermissionDef[]>('/rbac/permissions/list');
 }
 
 export async function fetchPermissionGroups() {
   return requestClient.post<PermissionGroup[]>('/rbac/groups/list');
+}
+
+export async function fetchDefaultRegisterGroupSetting() {
+  return requestClient.post<DefaultRegisterGroupSetting>('/rbac/groups/default/get');
+}
+
+export async function saveDefaultRegisterGroupSetting(groupId: number) {
+  return requestClient.post<DefaultRegisterGroupSetting>('/rbac/groups/default/set', {
+    groupId,
+  });
 }
 
 export async function savePermissionGroup(payload: SaveGroupPayload) {
